@@ -1,0 +1,28 @@
+{
+  "name": "@percy/protractor",
+  "version": "0.0.1",
+  "description": "Percy.io integration with Protractor",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/percy/percy-protractor.git"
+  },
+  "author": "Perceptual Inc.",
+  "license": "MIT",
+  "devDependencies": {
+    "@percy/tslint": "^1.0.0",
+    "typescript": "^3.1.6"
+  },
+  "scripts": {
+    "prepublishOnly": "npm run build",
+    "build": "tsc"
+  },
+  "peerDependencies": {},
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@percy/agent": "^0.1.3"
+  }
+}

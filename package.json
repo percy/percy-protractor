@@ -12,11 +12,16 @@
   "license": "MIT",
   "devDependencies": {
     "@percy/tslint": "^1.0.0",
+    "http-server": "^0.11.1",
+    "protractor": "^5.4.1",
     "typescript": "^3.1.6"
   },
   "scripts": {
+    "install": "webdriver-manager update",
     "prepublishOnly": "npm run build",
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npm run build && protractor conf.js",
+    "snapshots": "percy exec -- npm run test"
   },
   "peerDependencies": {},
   "publishConfig": {

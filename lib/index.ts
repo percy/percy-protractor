@@ -1,4 +1,5 @@
 import fs = require('fs')
+import { agentJsFilename } from '@percy/agent'
 import { clientInfo } from './environment'
 
 declare var PercyAgent: any
@@ -19,17 +20,9 @@ export async function percySnapshot(name: string, options: any = {}) {
   if (!name) {
     throw new Error("'name' must be provided.")
   }
-  browser.executeScript(fs.readFileSync(_agentJsFilepath()).toString())
+  browser.executeScript(fs.readFileSync(agentJsFilename()).toString())
   browser.executeScript((name: string, options: any, clientInfo: string) => {
       const percyAgentClient = new PercyAgent({clientInfo})
       percyAgentClient.snapshot(name, options)
     }, name, options, clientInfo())
   }
-
-function _agentJsFilepath(): string {
-  try {
-    return require.resolve('@percy/agent/dist/public/percy-agent.js')
-  } catch {
-    return 'node_modules/@percy/agent/dist/public/percy-agent.js'
-  }
-}

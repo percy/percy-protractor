@@ -8,6 +8,13 @@
     "type": "git",
     "url": "https://github.com/percy/percy-protractor.git"
   },
+  "keywords": [
+    "protractor",
+    "testing"
+  ],
+  "engines": {
+    "node": ">=8.0.0"
+  },
   "author": "Perceptual Inc.",
   "license": "MIT",
   "devDependencies": {

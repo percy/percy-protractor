@@ -24,11 +24,13 @@
     "typescript": "^3.1.6"
   },
   "scripts": {
-    "install": "webdriver-manager update",
+    "webdriver-update": "webdriver-manager update --gecko false --standalone false",
+    "install": "npm run webdriver-update || npm run webdriver-update",
     "prepublishOnly": "npm run build",
     "build": "tsc",
     "pretest": "npm run build",
-    "test": "percy exec -- protractor conf.js"
+    "test": "percy exec -- protractor conf.js",
+    "test-win": "npm run pretest && percy exec -- protractor.cmd conf.js"
   },
   "peerDependencies": {},
   "publishConfig": {

@@ -1,5 +1,5 @@
 import fs = require('fs')
-import { agentJsFilename } from '@percy/agent'
+const { agentJsFilename } = require('@percy/agent/dist/utils/sdk-utils')
 import { clientInfo } from './environment'
 
 declare var PercyAgent: any

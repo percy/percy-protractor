@@ -28,17 +28,17 @@ describe('@percy/protractor SDK', function() {
     })
 
     it('snapshots with provided name', function() {
-      percySnapshot(this.test.fullTitle())
+      percySnapshot('snapshots with provided name')
     })
 
     it('snapshots with provided name and widths', function() {
-      percySnapshot(this.test.fullTitle(), {
+      percySnapshot('snapshots with provided name and widths', {
         widths: [768, 992, 1200],
       })
     })
 
     it('snapshots with provided name and minHeight', function() {
-      percySnapshot(this.test.fullTitle(), {
+      percySnapshot('snapshots with provided name and minHeight', {
         minHeight: 2000,
       })
     })
@@ -48,22 +48,22 @@ describe('@percy/protractor SDK', function() {
         'A thing to accomplish',
         protractor.Key.ENTER
       )
-      percySnapshot(this.test.fullTitle() + '#1')
+      percySnapshot('takes multiple snapshots - #1')
 
       element(by.css('input.toggle')).click()
-      percySnapshot(this.test.fullTitle() + '#2')
+      percySnapshot('takes multiple snapshots - #2')
     })
   })
 
   describe('with live sites', function() {
     it('snapshots a website with HTTP', function() {
       browser.get('http://example.com/')
-      percySnapshot(this.test.fullTitle())
+      percySnapshot('snapshots a website with HTTP')
     })
 
     it('snapshots a website with HTTPS, strict CSP, CORS and HSTS setup', function() {
       browser.get('https://sdk-test.percy.dev')
-      percySnapshot(this.test.fullTitle())
+      percySnapshot('snapshots a website with HTTPS, strict CSP, CORS and HSTS setup')
     })
   })
 })

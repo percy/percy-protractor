@@ -56,6 +56,14 @@ describe('@percy/protractor SDK', function() {
   })
 
   describe('with live sites', function() {
+    before(function() {
+      browser.waitForAngularEnabled(false)
+    })
+  
+    after(function() {
+      browser.waitForAngularEnabled(true)
+    })
+
     it('snapshots a website with HTTP', function() {
       browser.get('http://example.com/')
       percySnapshot('snapshots a website with HTTP')

@@ -56,11 +56,11 @@ describe('@percy/protractor SDK', function() {
   })
 
   describe('with live sites', function() {
-    before(function() {
+    beforeEach(function() {
       browser.waitForAngularEnabled(false)
     })
   
-    after(function() {
+    afterEach(function() {
       browser.waitForAngularEnabled(true)
     })
 

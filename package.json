@@ -1,6 +1,6 @@
 {
   "name": "@percy/protractor",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Percy.io integration with Protractor",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

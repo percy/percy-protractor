@@ -48,14 +48,10 @@ describe('@percy/protractor SDK', function() {
         'A thing to accomplish',
         protractor.Key.ENTER
       )
-      await percySnapshot('takes multiple snapshots - #1', {
-        widths: [768, 992, 1200],
-      })
+      await percySnapshot('takes multiple snapshots - #1')
 
       await element(by.css('input.toggle')).click()
-      await percySnapshot('takes multiple snapshots - #2', {
-        widths: [768, 992, 1200],
-      })
+      await percySnapshot('takes multiple snapshots - #2')
     })
   })
 

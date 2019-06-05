@@ -18,60 +18,59 @@ describe('@percy/protractor SDK', function() {
   })
 
   describe('with local app', function() {
-    beforeEach(function() {
-      browser.get(TEST_URL)
+    beforeEach(async function() {
+      await browser.get(TEST_URL)
     })
 
-    afterEach(function() {
+    afterEach(async function() {
       // Clear local storage between tests so that we always start with a clean slate.
-      browser.executeScript('window.localStorage.clear()')
+      await browser.executeScript('window.localStorage.clear()')
     })
 
-    it('snapshots with provided name', function() {
-      percySnapshot('snapshots with provided name')
+    it('snapshots with provided name', async function() {
+      await percySnapshot('snapshots with provided name')
     })
 
-    it('snapshots with provided name and widths', function() {
-      percySnapshot('snapshots with provided name and widths', {
+    it('snapshots with provided name and widths', async function() {
+      await percySnapshot('snapshots with provided name and widths', {
         widths: [768, 992, 1200],
       })
     })
 
-    it('snapshots with provided name and minHeight', function() {
-      percySnapshot('snapshots with provided name and minHeight', {
+    it('snapshots with provided name and minHeight', async function() {
+      await percySnapshot('snapshots with provided name and minHeight', {
         minHeight: 2000,
       })
     })
 
-    it('takes multiple snapshots in one test', function() {
-      element(by.css('.new-todo')).sendKeys(
+    it('takes multiple snapshots in one test', async function() {
+      await element(by.css('.new-todo')).sendKeys(
         'A thing to accomplish',
         protractor.Key.ENTER
       )
-      percySnapshot('takes multiple snapshots - #1')
+      await percySnapshot('takes multiple snapshots - #1')
 
-      element(by.css('input.toggle')).click()
-      percySnapshot('takes multiple snapshots - #2')
+      await element(by.css('input.toggle')).click()
+      await percySnapshot('takes multiple snapshots - #2')
     })
   })
 
   describe('with live sites', function() {
-    beforeEach(function() {
-      browser.waitForAngularEnabled(false)
-    })
-  
-    afterEach(function() {
-      browser.waitForAngularEnabled(true)
+    beforeEach(async function() {
+      await browser.waitForAngularEnabled(false)
     })
 
-    it('snapshots a website with HTTP', function() {
-      browser.get('http://example.com/')
-      percySnapshot('snapshots a website with HTTP')
+    afterEach(async function() {
+      await browser.waitForAngularEnabled(true)
+    })
+    it('snapshots a website with HTTP', async function() {
+      await browser.get('http://example.com/')
+      await percySnapshot('snapshots a website with HTTP')
     })
 
-    it('snapshots a website with HTTPS, strict CSP, CORS and HSTS setup', function() {
-      browser.get('https://sdk-test.percy.dev')
-      percySnapshot('snapshots a website with HTTPS, strict CSP, CORS and HSTS setup')
+    it('snapshots a website with HTTPS, strict CSP, CORS and HSTS setup', async function() {
+      await browser.get('https://sdk-test.percy.dev')
+      await percySnapshot('snapshots a website with HTTPS, strict CSP, CORS and HSTS setup')
     })
   })
 })

@@ -21,19 +21,22 @@
     "@percy/tslint": "^1.0.0",
     "@semantic-release/changelog": "^3.0.2",
     "@semantic-release/git": "^7.0.8",
+    "chromedriver": "^78.0.1",
     "http-server": "^0.11.1",
     "protractor": "^5.4.1",
     "semantic-release": "^15.13.3",
     "typescript": "^3.1.6"
   },
+  "resolutions": {
+    "ecstatic": "3.2.2"
+  },
   "scripts": {
+    "prepublishOnly": "npm run build",
     "webdriver-update": "webdriver-manager update --gecko false --standalone false",
     "install": "npm run webdriver-update || npm run webdriver-update",
-    "prepublishOnly": "npm run build",
     "build": "tsc",
     "pretest": "npm run build",
-    "test": "percy exec -- protractor conf.js",
-    "test-win": "npm run pretest && percy exec -- protractor.cmd conf.js"
+    "test": "percy exec -- protractor conf.js"
   },
   "peerDependencies": {},
   "publishConfig": {

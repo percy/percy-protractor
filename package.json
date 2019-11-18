@@ -27,6 +27,9 @@
     "semantic-release": "^15.13.3",
     "typescript": "^3.1.6"
   },
+  "resolutions": {
+    "ecstatic": "3.2.2"
+  },
   "scripts": {
     "prepublishOnly": "npm run build",
     "webdriver-update": "webdriver-manager update --gecko false --standalone false",

@@ -1,0 +1,22 @@
+name: Windows
+on: [push, pull_request]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1.0.0
+      - name: Install
+        run: yarn
+      - name: Install correct chromedriver
+        run: yarn add -D chromedriver@78
+      - name: Install correct chromedriver
+        run: yarn add -D chromedriver@78
+      - name: Build
+        run: yarn build
+      - name: Percy Test
+        uses: percy/exec-action@v0.1.2
+        with:
+          command: "protractor conf.js"
+        env:
+          PERCY_TOKEN: ${{ secrets.PERCY_TOKEN }}

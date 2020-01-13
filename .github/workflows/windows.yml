@@ -8,6 +8,8 @@ jobs:
         uses: actions/checkout@v1.0.0
       - name: Install
         run: yarn
+      - name: Install correct chromedriver
+        run: yarn add -D chromedriver@78
       - name: Percy Test
         uses: percy/exec-action@v0.1.2
         with:

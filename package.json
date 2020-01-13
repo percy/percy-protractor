@@ -33,6 +33,7 @@
   "scripts": {
     "prepublishOnly": "npm run build",
     "webdriver-update": "webdriver-manager update --gecko false --standalone false",
+    "install": "npm run webdriver-update || npm run webdriver-update",
     "build": "tsc",
     "pretest": "npm run build",
     "test": "percy exec -- protractor conf.js"

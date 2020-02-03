@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/percy/percy-protractor/compare/v1.0.4...v1.1.0) (2020-02-03)
+
+
+### Features
+
+* Use node v10 ([89d564e](https://github.com/percy/percy-protractor/commit/89d564e605dc6ff9db76e9a4e01f8bba6142fab9))
+
 ## [1.0.4](https://github.com/percy/percy-protractor/compare/v1.0.3...v1.0.4) (2019-06-05)
 
 

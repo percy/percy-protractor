@@ -1,62 +1,46 @@
 {
   "name": "@percy/protractor",
-  "version": "1.1.0",
-  "description": "Percy.io integration with Protractor",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/percy/percy-protractor.git"
-  },
+  "description": "Protractor client library for visual testing with Percy",
+  "version": "2.0.0-beta.1",
+  "license": "MIT",
+  "author": "Perceptual Inc.",
+  "repository": "https://github.com/percy/percy-protractor",
   "keywords": [
     "protractor",
-    "testing"
+    "percy",
+    "visual testing"
   ],
-  "engines": {
-    "node": ">=10.0.0"
-  },
-  "author": "Perceptual Inc.",
-  "license": "MIT",
-  "devDependencies": {
-    "@percy/tslint": "^1.0.0",
-    "@semantic-release/changelog": "^5.0.0",
-    "@semantic-release/git": "^9.0.0",
-    "chromedriver": "^86.0.0",
-    "http-server": "^0.12.0",
-    "protractor": "^7.0.0",
-    "semantic-release": "^17.0.4",
-    "typescript": "^4.0.3"
-  },
-  "resolutions": {
-    "ecstatic": "3.2.2"
-  },
+  "main": "index.js",
+  "types": "types/index.d.ts",
+  "files": [
+    "index.js",
+    "types/index.d.ts"
+  ],
   "scripts": {
-    "prepublishOnly": "npm run build",
-    "webdriver-update": "webdriver-manager update --gecko false --standalone false",
-    "install": "npm run webdriver-update || npm run webdriver-update",
-    "build": "tsc",
-    "pretest": "npm run build",
-    "test": "percy exec -- protractor conf.js"
-  },
-  "peerDependencies": {},
-  "publishConfig": {
-    "access": "public"
+    "install": "webdriver-manager update --no-chrome --no-standalone",
+    "lint": "eslint --ignore-path .gitignore .",
+    "test": "protractor protractor.conf.js",
+    "test:coverage": "nyc yarn test",
+    "test:types": "tsd"
   },
   "dependencies": {
-    "@percy/agent": "~0"
+    "@percy/sdk-utils": "~1.0.0-beta.22"
   },
-  "release": {
-    "plugins": [
-      "@semantic-release/commit-analyzer",
-      "@semantic-release/release-notes-generator",
-      [
-        "@semantic-release/changelog",
-        {
-          "changelogFile": "CHANGELOG.md"
-        }
-      ],
-      "@semantic-release/npm",
-      "@semantic-release/git"
-    ]
+  "peerDependencies": {
+    "protractor": "~7"
+  },
+  "devDependencies": {
+    "@percy/core": "~1.0.0-beta.22",
+    "eslint": "^7.11.0",
+    "eslint-config-standard": "^16.0.1",
+    "eslint-plugin-import": "^2.22.1",
+    "eslint-plugin-node": "^11.1.0",
+    "eslint-plugin-promise": "^4.2.1",
+    "eslint-plugin-standard": "^4.0.1",
+    "expect": "^26.5.3",
+    "mocha": "^8.2.1",
+    "nyc": "^15.1.0",
+    "protractor": "^7.0.0",
+    "tsd": "^0.13.1"
   }
 }

@@ -3,7 +3,7 @@ const sdk = require('@percy/sdk-utils/test/helper');
 const percySnapshot = require('..');
 
 describe('percySnapshot', () => {
-  let og = browser;
+  let og;
 
   before(async () => {
     await sdk.testsite.mock();
@@ -15,6 +15,7 @@ describe('percySnapshot', () => {
   });
 
   beforeEach(async function() {
+    og = browser;
     this.timeout(0);
     await sdk.setup();
     await browser.get('http://localhost:8000');
@@ -90,22 +91,6 @@ describe('percySnapshot', () => {
     expect(sdk.stdio[2]).toEqual([
       '[percy] Could not take DOM snapshot "Snapshot 1"\n',
       '[percy] Error: failure\n'
-    ]);
-  });
-
-  it('handles eval errors', async () => {
-    sdk.serializeDOM = () => {
-      throw new Error('serialize error');
-    };
-
-    await sdk.stdio(async () => {
-      await percySnapshot('Snapshot 1');
-    });
-
-    expect(sdk.stdio[1]).toHaveLength(0);
-    expect(sdk.stdio[2]).toEqual([
-      '[percy] Could not take DOM snapshot "Snapshot 1"\n',
-      '[percy] JavascriptError: Error: serialize error\n'
     ]);
   });
 });

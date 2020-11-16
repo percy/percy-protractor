@@ -26,15 +26,15 @@ describe('percySnapshot', () => {
     browser = og;
   });
 
-  it('throws an error when the browser object is missing', async () => {
+  it('throws an error when the browser object is missing', () => {
     browser = null;
 
-    await expect(percySnapshot()).rejects
+    expect(() => percySnapshot())
       .toThrow('Protractor\'s `browser` was not found.');
   });
 
-  it('throws an error when a name is not provided', async () => {
-    await expect(percySnapshot()).rejects
+  it('throws an error when a name is not provided', () => {
+    expect(() => percySnapshot())
       .toThrow('The `name` argument is required.');
   });
 

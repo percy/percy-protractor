@@ -20,8 +20,7 @@ $ npm install --save-dev @percy/cli @percy/protractor@next
 ```
 ## Usage
 
-This is an example using the `percySnapshot()` function. **Note:** the `percySnapshot()` function
-does not work with Protractor's control flow and only works using
+This is an example using the `percySnapshot()` function using
 [async/await](https://www.protractortest.org/#/async-await).
 
 ```javascript

@@ -24,13 +24,13 @@
     "test:types": "tsd"
   },
   "dependencies": {
-    "@percy/sdk-utils": "~1.0.0-beta.22"
+    "@percy/sdk-utils": "~1.0.0-beta.30"
   },
   "peerDependencies": {
     "protractor": "~7"
   },
   "devDependencies": {
-    "@percy/core": "~1.0.0-beta.22",
+    "@percy/core": "~1.0.0-beta.30",
     "eslint": "^7.11.0",
     "eslint-config-standard": "^16.0.1",
     "eslint-plugin-import": "^2.22.1",

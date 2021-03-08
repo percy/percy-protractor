@@ -1,6 +1,6 @@
 const expect = require('expect');
 const sdk = require('@percy/sdk-utils/test/helper');
-let percySnapshot = require('..');
+const percySnapshot = require('..');
 
 describe('percySnapshot', () => {
   let og;
@@ -92,9 +92,6 @@ describe('percySnapshot', () => {
   it('works in standalone mode', async () => {
     browser = null;
 
-    delete require.cache[require.resolve('..')];
-    percySnapshot = require('..');
-
     await percySnapshot(og, 'Snapshot 1');
     await percySnapshot(og, 'Snapshot 2');
 
@@ -114,9 +111,6 @@ describe('percySnapshot', () => {
 
   it('throws the proper argument error in standalone mode', async () => {
     browser = null;
-
-    delete require.cache[require.resolve('..')];
-    percySnapshot = require('..');
 
     expect(() => percySnapshot())
       .toThrow("Protractor's `browser` was not found");

@@ -1,6 +1,6 @@
 const expect = require('expect');
 const sdk = require('@percy/sdk-utils/test/helper');
-const percySnapshot = require('..');
+let percySnapshot = require('..');
 
 describe('percySnapshot', () => {
   let og;
@@ -87,5 +87,38 @@ describe('percySnapshot', () => {
       '[percy] Could not take DOM snapshot "Snapshot 1"\n',
       '[percy] Error: failure\n'
     ]);
+  });
+
+  it('works in standalone mode', async () => {
+    browser = null;
+
+    delete require.cache[require.resolve('..')];
+    percySnapshot = require('..');
+
+    await percySnapshot(og, 'Snapshot 1');
+    await percySnapshot(og, 'Snapshot 2');
+
+    expect(sdk.server.requests).toEqual([
+      ['/percy/healthcheck'],
+      ['/percy/dom.js'],
+      ['/percy/snapshot', expect.objectContaining({
+        name: 'Snapshot 1'
+      })],
+      ['/percy/snapshot', expect.objectContaining({
+        name: 'Snapshot 2'
+      })]
+    ]);
+
+    expect(sdk.logger.stderr).toEqual([]);
+  });
+
+  it('throws the proper argument error in standalone mode', async () => {
+    browser = null;
+
+    delete require.cache[require.resolve('..')];
+    percySnapshot = require('..');
+
+    expect(() => percySnapshot())
+      .toThrow("Protractor's `browser` was not found");
   });
 });

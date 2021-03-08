@@ -7,21 +7,23 @@ const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `${protractorPkg.name}/${protractorPkg.version}`;
 
 // Take a DOM snapshot and post it to the snapshot endpoint
-module.exports = function percySnapshot(name, options) {
-  if (!browser) throw new Error('Protractor\'s `browser` was not found.');
+module.exports = function percySnapshot(b, name, options) {
+  // allow working with or without standalone mode
+  if (!b || typeof b === 'string') [b, name, options] = [browser, b, name];
+  if (!b) throw new Error('Protractor\'s `browser` was not found.');
   if (!name) throw new Error('The `name` argument is required.');
 
-  return browser.call(async () => {
+  return b.call(async () => {
     if (!(await utils.isPercyEnabled())) return;
     let log = utils.logger('protractor');
 
     try {
       // Inject the DOM serialization script
-      await browser.executeScript(await utils.fetchPercyDOM());
+      await b.executeScript(await utils.fetchPercyDOM());
 
       // Serialize and capture the DOM
       /* istanbul ignore next: no instrumenting injected code */
-      let { domSnapshot, url } = await browser.executeScript(options => ({
+      let { domSnapshot, url } = await b.executeScript(options => ({
         /* eslint-disable-next-line no-undef */
         domSnapshot: PercyDOM.serialize(options),
         url: document.URL

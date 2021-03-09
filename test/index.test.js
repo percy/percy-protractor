@@ -88,4 +88,31 @@ describe('percySnapshot', () => {
       '[percy] Error: failure\n'
     ]);
   });
+
+  it('works in standalone mode', async () => {
+    browser = null;
+
+    await percySnapshot(og, 'Snapshot 1');
+    await percySnapshot(og, 'Snapshot 2');
+
+    expect(sdk.server.requests).toEqual([
+      ['/percy/healthcheck'],
+      ['/percy/dom.js'],
+      ['/percy/snapshot', expect.objectContaining({
+        name: 'Snapshot 1'
+      })],
+      ['/percy/snapshot', expect.objectContaining({
+        name: 'Snapshot 2'
+      })]
+    ]);
+
+    expect(sdk.logger.stderr).toEqual([]);
+  });
+
+  it('throws the proper argument error in standalone mode', async () => {
+    browser = null;
+
+    expect(() => percySnapshot())
+      .toThrow("Protractor's `browser` was not found");
+  });
 });

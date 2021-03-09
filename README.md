@@ -7,16 +7,8 @@
 
 ## Installation
 
-Using yarn:
-
 ```sh-session
-$ yarn add --dev @percy/cli @percy/protractor@next
-```
-
-Using npm:
-
-```sh-session
-$ npm install --save-dev @percy/cli @percy/protractor@next
+$ npm install --save-dev @percy/cli @percy/protractor
 ```
 ## Usage
 
@@ -92,14 +84,6 @@ $ percy exec -- protractor conf.js
 
 If you're coming from a pre-2.0 version of this package, make sure to install `@percy/cli` after
 upgrading to retain any existing scripts that reference the Percy CLI command.
-
-Using yarn:
-
-```sh-session
-$ yarn add --dev @percy/cli
-```
-
-Using npm:
 
 ```sh-session
 $ npm install --save-dev @percy/cli

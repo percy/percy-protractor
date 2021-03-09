@@ -79,7 +79,9 @@ $ percy exec -- protractor conf.js
 ## Configuration
 
 `percySnapshot(name[, options])`
+`percySnapshot(browser, name[, options])` (standalone mode only)
 
+- `browser` (**required**) - The Protractor browser object
 - `name` (**required**) - The snapshot name; must be unique to each snapshot
 - `options` - Additional snapshot options (overrides any project options)
   - `options.widths` - An array of widths to take screenshots at

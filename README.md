@@ -84,11 +84,34 @@ $ percy exec -- protractor conf.js
 
 ## Upgrading
 
-If you're coming from a pre-2.0 version of this package, make sure to install `@percy/cli` after
-upgrading to retain any existing scripts that reference the Percy CLI command.
+### Automatically with `@percy/migrate`
 
-```sh-session
-$ npm install --save-dev @percy/cli
+We built a tool to help automate migrating to the new CLI toolchain! Migrating
+can be done by running the following commands and following the prompts:
+
+``` shell
+$ npx @percy/migrate
+? Are you currently using @percy/protractor? Yes
+? Install @percy/cli (required to run percy)? Yes
+? Migrate Percy config file? Yes
+? Upgrade SDK to @percy/protractor@2.0.0? Yes
+```
+
+This will automatically run the changes described below for you.
+
+### Manually
+
+### Import change
+
+If you're coming from a pre-2.0 version of this package, the `percySnapshot` function is now the default
+export.
+
+```javascript
+// before
+const { percySnapshot } = require('@percy/protractor');
+
+// after
+const percySnapshot = require('@percy/protractor');
 ```
 
 ### Migrating Config

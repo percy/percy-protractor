@@ -317,7 +317,7 @@
   resolved "https://registry.yarnpkg.com/@percy/env/-/env-1.0.0-beta.59.tgz#9ae40b3f2d48574fa3f498dcd20d96918c77b000"
   integrity sha512-w2b2Rc4IRE2ZY2Fn9ZGq6T6ZOi32q7V93h5m0HCNF/7kFCLhNNMg+YqdTaq2nnEp5FJce+tB+CGvncNDEJgnJQ==
 
-"@percy/logger@^1.0.0-beta.58", "@percy/logger@^1.0.0-beta.59":
+"@percy/logger@^1.0.0-beta.59":
   version "1.0.0-beta.59"
   resolved "https://registry.yarnpkg.com/@percy/logger/-/logger-1.0.0-beta.59.tgz#ab42550e893f8758db42878bc5f846db5d1bc73c"
   integrity sha512-3qcV/YMu7JgGWl3INSSzSc9E1FIDqTeY6Th9QdEwOtUjG67XhuzJY/T5uwEdcWAK0SfsQ5jlp0YEs/NcHq6Znw==
@@ -2391,9 +2391,9 @@ minimist@^1.2.0, minimist@^1.2.5:
   integrity sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==
 
 mocha@^9.0.0:
-  version "9.0.2"
-  resolved "https://registry.yarnpkg.com/mocha/-/mocha-9.0.2.tgz#e84849b61f406a680ced85af76425f6f3108d1a0"
-  integrity sha512-FpspiWU+UT9Sixx/wKimvnpkeW0mh6ROAKkIaPokj3xZgxeRhcna/k5X57jJghEr8X+Cgu/Vegf8zCX5ugSuTA==
+  version "9.0.3"
+  resolved "https://registry.yarnpkg.com/mocha/-/mocha-9.0.3.tgz#128cd6bbd3ee0adcdaef715f357f76ec1e6227c7"
+  integrity sha512-hnYFrSefHxYS2XFGtN01x8un0EwNu2bzKvhpRFhgoybIvMaOkkL60IVPmkb5h6XDmUl4IMSB+rT5cIO4/4bJgg==
   dependencies:
     "@ungap/promise-all-settled" "1.1.2"
     ansi-colors "4.1.1"

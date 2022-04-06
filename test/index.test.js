@@ -1,11 +1,11 @@
 const expect = require('expect');
-const helpers = require('@percy/sdk-utils/test/helpers');
 const percySnapshot = require('..');
 
 describe('percySnapshot', () => {
-  let og;
+  let og, helpers;
 
   before(async () => {
+    ({ default: helpers } = await import('@percy/sdk-utils/test/helpers'));
     await helpers.mockSite();
     browser.ignoreSynchronization = true;
   });

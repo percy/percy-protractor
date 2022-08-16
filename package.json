@@ -22,7 +22,7 @@
   "scripts": {
     "install": "webdriver-manager update --no-chrome --no-standalone",
     "lint": "eslint --ignore-path .gitignore .",
-    "test": "protractor protractor.conf.js",
+    "test": "percy exec --testing -- protractor protractor.conf.js",
     "test:coverage": "nyc yarn test",
     "test:types": "tsd"
   },
@@ -33,7 +33,7 @@
     "protractor": "~7"
   },
   "devDependencies": {
-    "@percy/core": "^1.0.0",
+    "@percy/cli": "^1.9.1",
     "eslint": "^7.11.0",
     "eslint-config-standard": "^16.0.1",
     "eslint-plugin-import": "^2.22.1",

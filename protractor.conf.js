@@ -1,6 +1,6 @@
 exports.config = {
   directConnect: true,
-  framework: 'mocha',
+  framework: 'jasmine',
   specs: ['test/*.test.js'],
   capabilities: {
     browserName: 'firefox',

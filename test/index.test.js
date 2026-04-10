@@ -81,4 +81,84 @@ describe('percySnapshot', () => {
     expect(() => percySnapshot())
       .toThrowError("Protractor's `browser` was not found.");
   });
+
+  it('does not include corsIframes when page has no iframes', async () => {
+    await percySnapshot('No Iframes Snapshot');
+
+    let logs = await helpers.get('logs');
+
+    expect(logs).toEqual(jasmine.arrayContaining([
+      'Snapshot found: No Iframes Snapshot'
+    ]));
+  });
+});
+
+describe('isUnsupportedIframeSrc', () => {
+  const { isUnsupportedIframeSrc } = require('..');
+
+  it('returns true for null/undefined/empty src', () => {
+    expect(isUnsupportedIframeSrc(null)).toBe(true);
+    expect(isUnsupportedIframeSrc(undefined)).toBe(true);
+    expect(isUnsupportedIframeSrc('')).toBe(true);
+  });
+
+  it('returns true for about:blank', () => {
+    expect(isUnsupportedIframeSrc('about:blank')).toBe(true);
+  });
+
+  it('returns true for about:srcdoc', () => {
+    expect(isUnsupportedIframeSrc('about:srcdoc')).toBe(true);
+  });
+
+  it('returns true for javascript: URLs', () => {
+    expect(isUnsupportedIframeSrc('javascript:void(0)')).toBe(true);
+  });
+
+  it('returns true for data: URLs', () => {
+    expect(isUnsupportedIframeSrc('data:text/html,<h1>Test</h1>')).toBe(true);
+  });
+
+  it('returns true for blob: URLs', () => {
+    expect(isUnsupportedIframeSrc('blob:http://example.com/abc')).toBe(true);
+  });
+
+  it('returns true for vbscript: URLs', () => {
+    expect(isUnsupportedIframeSrc('vbscript:msgbox')).toBe(true);
+  });
+
+  it('returns true for chrome: URLs', () => {
+    expect(isUnsupportedIframeSrc('chrome://settings')).toBe(true);
+  });
+
+  it('returns true for chrome-extension: URLs', () => {
+    expect(isUnsupportedIframeSrc('chrome-extension://abc/page.html')).toBe(true);
+  });
+
+  it('returns false for http URLs', () => {
+    expect(isUnsupportedIframeSrc('http://example.com')).toBe(false);
+  });
+
+  it('returns false for https URLs', () => {
+    expect(isUnsupportedIframeSrc('https://example.com/iframe')).toBe(false);
+  });
+});
+
+describe('getOrigin', () => {
+  const { getOrigin } = require('..');
+
+  it('extracts origin from a valid URL', () => {
+    expect(getOrigin('https://example.com/path')).toBe('https://example.com');
+  });
+
+  it('includes port in origin when specified', () => {
+    expect(getOrigin('http://localhost:8080/page')).toBe('http://localhost:8080');
+  });
+
+  it('returns null for invalid URLs', () => {
+    expect(getOrigin('not-a-url')).toBeNull();
+  });
+
+  it('returns null for empty string', () => {
+    expect(getOrigin('')).toBeNull();
+  });
 });

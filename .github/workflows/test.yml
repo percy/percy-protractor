@@ -51,6 +51,6 @@ jobs:
           yarn global:link
           cd ${{ github.workspace }} 
           yarn remove @percy/cli && yarn link `echo $PERCY_PACKAGES`
-          npx webdriver-manager update --no-chrome --no-standalone
+          npx webdriver-manager update --no-chrome --no-standalone --versions.gecko=v0.30.0
           npx percy --version
       - run: yarn test:coverage

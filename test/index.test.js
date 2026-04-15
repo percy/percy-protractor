@@ -162,3 +162,287 @@ describe('getOrigin', () => {
     expect(getOrigin('')).toBeNull();
   });
 });
+
+describe('processFrame', () => {
+  const { processFrame } = require('..');
+
+  function mockBrowser(snapshot) {
+    return {
+      executeScript: jasmine.createSpy('executeScript').and.returnValue(Promise.resolve(snapshot)),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+  }
+
+  function mockLog() {
+    return { debug: jasmine.createSpy('debug') };
+  }
+
+  it('returns captured iframe data on success', async () => {
+    let snapshot = { html: '<html></html>' };
+    let b = mockBrowser(snapshot);
+    let log = mockLog();
+    let iframe = { src: 'https://other.com/frame', index: 0, percyElementId: 'abc123' };
+
+    let result = await processFrame(b, iframe, {}, 'percyDOMScript', log);
+
+    expect(result).toEqual({
+      frameUrl: 'https://other.com/frame',
+      iframeData: { percyElementId: 'abc123' },
+      iframeSnapshot: snapshot
+    });
+    expect(b.switchTo).toHaveBeenCalled();
+  });
+
+  it('returns null when serialization returns empty', async () => {
+    let b = mockBrowser(null);
+    let log = mockLog();
+    let iframe = { src: 'https://other.com/frame', index: 0, percyElementId: 'abc123' };
+
+    let result = await processFrame(b, iframe, {}, 'percyDOMScript', log);
+
+    expect(result).toBeNull();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/empty result/));
+  });
+
+  it('returns null and logs on error', async () => {
+    let b = {
+      executeScript: jasmine.createSpy('executeScript').and.returnValue(Promise.reject(new Error('frame error'))),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+    let iframe = { src: 'https://other.com/frame', index: 0, percyElementId: 'abc123' };
+
+    let result = await processFrame(b, iframe, {}, 'percyDOMScript', log);
+
+    expect(result).toBeNull();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Failed to process/));
+  });
+
+  it('handles switchTo error in finally block', async () => {
+    let switchTo = {
+      frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+      defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.reject(new Error('switch error')))
+    };
+    let b = {
+      executeScript: jasmine.createSpy('executeScript').and.returnValue(Promise.resolve({ html: '<html></html>' })),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue(switchTo)
+    };
+    let log = mockLog();
+    let iframe = { src: 'https://other.com/frame', index: 0, percyElementId: 'abc123' };
+
+    let result = await processFrame(b, iframe, {}, 'percyDOMScript', log);
+
+    expect(result).not.toBeNull();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Failed to switch back/));
+  });
+});
+
+describe('captureSerializedDOM', () => {
+  const { captureSerializedDOM } = require('..');
+
+  function mockLog() {
+    return { debug: jasmine.createSpy('debug') };
+  }
+
+  it('returns domSnapshot and url with no iframes', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let b = {
+      executeScript: jasmine.createSpy('executeScript')
+        .and.returnValues(
+          Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' }),
+          Promise.resolve([])
+        ),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot).toEqual(domSnapshot);
+    expect(result.url).toBe('http://localhost:5338/test');
+  });
+
+  it('skips unsupported iframe srcs', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let iframes = [
+      { src: 'about:blank', srcdoc: null, percyElementId: 'a', index: 0 },
+      { src: 'javascript:void(0)', srcdoc: null, percyElementId: 'b', index: 1 },
+      { src: '', srcdoc: null, percyElementId: 'c', index: 2 }
+    ];
+    let b = {
+      executeScript: jasmine.createSpy('executeScript')
+        .and.returnValues(
+          Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' }),
+          Promise.resolve(iframes)
+        ),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot.corsIframes).toBeUndefined();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Skipping unsupported iframe src/));
+  });
+
+  it('skips srcdoc iframes', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let iframes = [
+      { src: 'https://other.com/frame', srcdoc: '<p>inline</p>', percyElementId: 'a', index: 0 }
+    ];
+    let b = {
+      executeScript: jasmine.createSpy('executeScript')
+        .and.returnValues(
+          Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' }),
+          Promise.resolve(iframes)
+        ),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot.corsIframes).toBeUndefined();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Skipping srcdoc iframe/));
+  });
+
+  it('skips iframes with invalid URLs', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let iframes = [
+      { src: 'not-a-url', srcdoc: null, percyElementId: 'a', index: 0 }
+    ];
+    let b = {
+      executeScript: jasmine.createSpy('executeScript')
+        .and.returnValues(
+          Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' }),
+          Promise.resolve(iframes)
+        ),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot.corsIframes).toBeUndefined();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Skipping iframe with invalid URL/));
+  });
+
+  it('skips same-origin iframes', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let iframes = [
+      { src: 'http://localhost:5338/other-page', srcdoc: null, percyElementId: 'a', index: 0 }
+    ];
+    let b = {
+      executeScript: jasmine.createSpy('executeScript')
+        .and.returnValues(
+          Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' }),
+          Promise.resolve(iframes)
+        ),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot.corsIframes).toBeUndefined();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Skipping same-origin iframe/));
+  });
+
+  it('skips cross-origin iframes without percyElementId', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let iframes = [
+      { src: 'https://other.com/frame', srcdoc: null, percyElementId: null, index: 0 }
+    ];
+    let b = {
+      executeScript: jasmine.createSpy('executeScript')
+        .and.returnValues(
+          Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' }),
+          Promise.resolve(iframes)
+        ),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot.corsIframes).toBeUndefined();
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/without data-percy-element-id/));
+  });
+
+  it('captures cross-origin iframes successfully', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let iframeSnapshot = { html: '<iframe-html></iframe-html>' };
+    let iframes = [
+      { src: 'https://other.com/frame', srcdoc: null, percyElementId: 'abc123', index: 0 }
+    ];
+    let callCount = 0;
+    let b = {
+      executeScript: jasmine.createSpy('executeScript').and.callFake(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' });
+        if (callCount === 2) return Promise.resolve(iframes);
+        if (callCount === 3) return Promise.resolve(); // inject PercyDOM
+        return Promise.resolve(iframeSnapshot); // serialize frame
+      }),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot.corsIframes).toEqual([{
+      frameUrl: 'https://other.com/frame',
+      iframeData: { percyElementId: 'abc123' },
+      iframeSnapshot
+    }]);
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Captured 1 cross-origin iframe/));
+  });
+
+  it('handles errors during CORS iframe processing gracefully', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let b = {
+      executeScript: jasmine.createSpy('executeScript')
+        .and.returnValues(
+          Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' }),
+          Promise.reject(new Error('script error'))
+        ),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot).toEqual(domSnapshot);
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Error capturing CORS iframes/));
+  });
+});

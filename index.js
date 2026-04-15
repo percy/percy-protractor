@@ -186,3 +186,5 @@ module.exports = function percySnapshot(b, name, options) {
 // Export helpers for testing
 module.exports.isUnsupportedIframeSrc = isUnsupportedIframeSrc;
 module.exports.getOrigin = getOrigin;
+module.exports.processFrame = processFrame;
+module.exports.captureSerializedDOM = captureSerializedDOM;

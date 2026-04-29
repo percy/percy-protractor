@@ -452,6 +452,83 @@ describe('captureSerializedDOM', () => {
     expect(result.domSnapshot.corsIframes).toBeUndefined();
   });
 
+  it('captures nested cross-origin iframes up to MAX_FRAME_DEPTH', async () => {
+    let domSnapshot = { html: '<html></html>' };
+    let outerIframes = [
+      { src: 'https://outer.com/page', srcdoc: null, percyElementId: 'p-outer', index: 0 }
+    ];
+    let outerSnapshot = { html: '<html>outer</html>' };
+    let innerIframesWithinOuter = [
+      { src: 'https://inner.com/page', srcdoc: null, percyElementId: 'p-inner', index: 0 }
+    ];
+    let innerSnapshot = { html: '<html>inner</html>' };
+    let innerInnerIframes = []; // no further nesting
+
+    let scriptCalls = [];
+    let parentFrameCalls = 0;
+    let defaultContentCalls = 0;
+
+    let switchTo = {
+      frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+      parentFrame: jasmine.createSpy('parentFrame').and.callFake(() => {
+        parentFrameCalls++;
+        return Promise.resolve();
+      }),
+      defaultContent: jasmine.createSpy('defaultContent').and.callFake(() => {
+        defaultContentCalls++;
+        return Promise.resolve();
+      })
+    };
+
+    let b = {
+      executeScript: jasmine.createSpy('executeScript').and.callFake((fn, ...args) => {
+        scriptCalls.push(typeof fn === 'function' ? fn.toString() : fn);
+        let last = scriptCalls[scriptCalls.length - 1];
+        // 1) top-level domSnapshot+url
+        if (last.includes('domSnapshot:')) {
+          return Promise.resolve({ domSnapshot, url: 'http://localhost:5338/host' });
+        }
+        // 2/4/6) iframe enumeration in current context
+        if (last.includes("querySelectorAll('iframe')") || last.includes('querySelectorAll("iframe")')) {
+          // Return progressively shallower nesting
+          if (scriptCalls.filter(s => s.includes('querySelectorAll')).length === 1) return Promise.resolve(outerIframes);
+          if (scriptCalls.filter(s => s.includes('querySelectorAll')).length === 2) return Promise.resolve(innerIframesWithinOuter);
+          return Promise.resolve(innerInnerIframes);
+        }
+        // 3/5) percyDOMScript injection (passed as a string)
+        if (typeof fn === 'string') return Promise.resolve();
+        // PercyDOM.serialize call inside a frame (top-level serialize is matched
+        // earlier via the 'domSnapshot:' marker, so any remaining serialize
+        // call is from a nested frame).
+        if (last.includes('PercyDOM.serialize')) {
+          let frameSerializeCalls = scriptCalls.filter(s => s.includes('PercyDOM.serialize') && !s.includes('domSnapshot:')).length;
+          if (frameSerializeCalls === 1) return Promise.resolve(outerSnapshot);
+          return Promise.resolve(innerSnapshot);
+        }
+        return Promise.resolve();
+      }),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue(switchTo)
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    expect(result.domSnapshot.corsIframes).toBeDefined();
+    expect(result.domSnapshot.corsIframes.length).toBe(2);
+    expect(result.domSnapshot.corsIframes[0]).toEqual({
+      frameUrl: 'https://outer.com/page',
+      iframeData: { percyElementId: 'p-outer' },
+      iframeSnapshot: outerSnapshot
+    });
+    expect(result.domSnapshot.corsIframes[1]).toEqual({
+      frameUrl: 'https://inner.com/page',
+      iframeData: { percyElementId: 'p-inner' },
+      iframeSnapshot: innerSnapshot
+    });
+    // Two depth-up restorations (one per recursion level).
+    expect(parentFrameCalls).toBe(2);
+  });
+
   it('handles errors during CORS iframe processing gracefully', async () => {
     let domSnapshot = { html: '<html></html>' };
     let b = {

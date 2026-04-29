@@ -123,18 +123,30 @@ async function processFrameTree(b, iframe, depth, options, percyDOMScript, log) 
 
     return collected;
   } catch (error) {
+    if (error && error.percyContextLost) throw error;
     log.debug(`Failed to process cross-origin iframe ${iframe.src}: ${error.message}`);
     return collected;
   } finally {
     if (switchedIn) {
       // Step up exactly one level so an outer recursion can keep enumerating.
       // Selenium's parentFrame() is "the parent of the current browsing context"
-      // which is the right granularity for this loop.
+      // which is the right granularity for this loop. When parentFrame fails we
+      // fall back to defaultContent() and — if we were inside a nested
+      // recursion (depth > 1) — signal callers to stop iterating siblings whose
+      // iframe.index values were resolved in the now-lost parent context. At
+      // depth 1 the caller is the top-level page enumerator, so falling back
+      // to top is the right destination anyway.
       try {
         await b.switchTo().parentFrame();
       } catch (e) {
-        log.debug(`Failed to switch back to parent frame: ${e.message}; falling back to defaultContent()`);
+        log.debug(`Failed to switch back to parent frame: ${e.message}`);
         try { await b.switchTo().defaultContent(); } catch (_) {}
+        if (depth > 1) {
+          const err = new Error(`Lost parent frame context: ${e.message}`);
+          err.percyContextLost = true;
+          // eslint-disable-next-line no-unsafe-finally
+          throw err;
+        }
       }
     }
   }
@@ -198,7 +210,16 @@ async function captureSerializedDOM(b, options, percyDOMScript, log) {
 
       for (let iframe of iframeInfo) {
         if (shouldSkipIframe(iframe, pageOrigin, log)) continue;
-        let entries = await processFrameTree(b, iframe, 1, options, percyDOMScript, log);
+        let entries;
+        try {
+          entries = await processFrameTree(b, iframe, 1, options, percyDOMScript, log);
+        } catch (error) {
+          if (error && error.percyContextLost) {
+            log.debug('Aborting further nested CORS capture due to lost frame context');
+            break;
+          }
+          throw error;
+        }
         if (entries.length) corsIframes.push(...entries);
       }
 

@@ -74,14 +74,19 @@ function enumerateIframesScript() {
 // recurses into any cross-origin iframes nested inside it. Returns a flat
 // array of corsIframes entries (one per cross-origin frame at any depth).
 // Bounded by MAX_FRAME_DEPTH to prevent runaway recursion.
-async function processFrameTree(b, iframe, depth, options, percyDOMScript, log) {
+async function processFrameTree(b, iframe, depth, ancestorUrls, options, percyDOMScript, log) {
   if (depth > MAX_FRAME_DEPTH) {
     log.debug(`Reached max iframe nesting depth (${MAX_FRAME_DEPTH}); stopping at ${iframe.src}`);
+    return [];
+  }
+  if (ancestorUrls && ancestorUrls.has(iframe.src)) {
+    log.debug(`Skipping cyclic iframe (${iframe.src} appears in ancestor chain)`);
     return [];
   }
 
   const collected = [];
   let switchedIn = false;
+  let capturedError = null;
   try {
     log.debug(`Processing cross-origin iframe (depth ${depth}): ${iframe.src}`);
 
@@ -113,9 +118,11 @@ async function processFrameTree(b, iframe, depth, options, percyDOMScript, log) 
       let currentOrigin = getOrigin(iframe.src);
       let childIframes = await b.executeScript(enumerateIframesScript);
       if (Array.isArray(childIframes)) {
+        let nextAncestors = new Set(ancestorUrls || []);
+        nextAncestors.add(iframe.src);
         for (let child of childIframes) {
           if (shouldSkipIframe(child, currentOrigin, log)) continue;
-          let nested = await processFrameTree(b, child, depth + 1, options, percyDOMScript, log);
+          let nested = await processFrameTree(b, child, depth + 1, nextAncestors, options, percyDOMScript, log);
           if (nested.length) collected.push(...nested);
         }
       }
@@ -123,8 +130,15 @@ async function processFrameTree(b, iframe, depth, options, percyDOMScript, log) 
 
     return collected;
   } catch (error) {
-    if (error && error.percyContextLost) throw error;
+    if (error && error.percyContextLost) {
+      if (Array.isArray(error.partialCapture) && error.partialCapture.length) {
+        collected.push(...error.partialCapture);
+      }
+      error.partialCapture = collected;
+      throw error;
+    }
     log.debug(`Failed to process cross-origin iframe ${iframe.src}: ${error.message}`);
+    capturedError = error;
     return collected;
   } finally {
     if (switchedIn) {
@@ -144,6 +158,8 @@ async function processFrameTree(b, iframe, depth, options, percyDOMScript, log) 
         if (depth > 1) {
           const err = new Error(`Lost parent frame context: ${e.message}`);
           err.percyContextLost = true;
+          err.partialCapture = collected;
+          if (capturedError) err.cause = capturedError;
           // eslint-disable-next-line no-unsafe-finally
           throw err;
         }
@@ -212,15 +228,18 @@ async function captureSerializedDOM(b, options, percyDOMScript, log) {
         if (shouldSkipIframe(iframe, pageOrigin, log)) continue;
         let entries;
         try {
-          entries = await processFrameTree(b, iframe, 1, options, percyDOMScript, log);
+          entries = await processFrameTree(b, iframe, 1, new Set([url]), options, percyDOMScript, log);
         } catch (error) {
           if (error && error.percyContextLost) {
             log.debug('Aborting further nested CORS capture due to lost frame context');
+            if (Array.isArray(error.partialCapture) && error.partialCapture.length) {
+              corsIframes.push(...error.partialCapture);
+            }
             break;
           }
           throw error;
         }
-        if (entries.length) corsIframes.push(...entries);
+        if (entries && entries.length) corsIframes.push(...entries);
       }
 
       if (corsIframes.length > 0) {

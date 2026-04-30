@@ -15,7 +15,20 @@ const UNSUPPORTED_IFRAME_SRCS = [
   'chrome-extension:'
 ];
 
-const MAX_FRAME_DEPTH = 10;
+const DEFAULT_MAX_FRAME_DEPTH = 10;
+const HARD_MAX_FRAME_DEPTH = 25;
+
+function resolveMaxFrameDepth(options = {}) {
+  const raw = options.maxIframeDepth ?? DEFAULT_MAX_FRAME_DEPTH;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_MAX_FRAME_DEPTH;
+  return Math.min(n, HARD_MAX_FRAME_DEPTH);
+}
+
+function resolveIgnoreSelectors(options = {}) {
+  const list = options.ignoreIframeSelectors ?? [];
+  return Array.isArray(list) ? list.filter(s => typeof s === 'string' && s.trim()) : [];
+}
 
 function isUnsupportedIframeSrc(src) {
   if (!src) return true;
@@ -31,6 +44,14 @@ function getOrigin(url) {
 }
 
 function shouldSkipIframe(iframe, currentOrigin, log) {
+  if (iframe.dataPercyIgnore) {
+    log.debug(`Skipping iframe marked with data-percy-ignore: ${iframe.src || '(no src)'}`);
+    return true;
+  }
+  if (iframe.matchesIgnoreSelector) {
+    log.debug(`Skipping iframe matching ignoreIframeSelectors: ${iframe.src || '(no src)'}`);
+    return true;
+  }
   if (!iframe.src || isUnsupportedIframeSrc(iframe.src)) {
     if (iframe.src) log.debug(`Skipping unsupported iframe src: ${iframe.src}`);
     return true;
@@ -56,14 +77,23 @@ function shouldSkipIframe(iframe, currentOrigin, log) {
 }
 
 /* istanbul ignore next: injected into the page, not part of coverage */
-function enumerateIframesScript() {
+function enumerateIframesScript(selectors) {
   let iframes = document.querySelectorAll('iframe');
   let result = [];
   for (let i = 0; i < iframes.length; i++) {
+    let frame = iframes[i];
+    let matchesIgnore = false;
+    if (selectors && selectors.length) {
+      for (let j = 0; j < selectors.length; j++) {
+        try { if (frame.matches(selectors[j])) { matchesIgnore = true; break; } } catch (e) { /* invalid */ }
+      }
+    }
     result.push({
-      src: iframes[i].src || '',
-      srcdoc: iframes[i].getAttribute('srcdoc'),
-      percyElementId: iframes[i].getAttribute('data-percy-element-id'),
+      src: frame.src || '',
+      srcdoc: frame.getAttribute('srcdoc'),
+      percyElementId: frame.getAttribute('data-percy-element-id'),
+      dataPercyIgnore: frame.hasAttribute('data-percy-ignore'),
+      matchesIgnoreSelector: matchesIgnore,
       index: i
     });
   }
@@ -74,9 +104,10 @@ function enumerateIframesScript() {
 // recurses into any cross-origin iframes nested inside it. Returns a flat
 // array of corsIframes entries (one per cross-origin frame at any depth).
 // Bounded by MAX_FRAME_DEPTH to prevent runaway recursion.
-async function processFrameTree(b, iframe, depth, ancestorUrls, options, percyDOMScript, log) {
-  if (depth > MAX_FRAME_DEPTH) {
-    log.debug(`Reached max iframe nesting depth (${MAX_FRAME_DEPTH}); stopping at ${iframe.src}`);
+async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
+  const { maxFrameDepth, ignoreSelectors, options, percyDOMScript, log } = ctx;
+  if (depth > maxFrameDepth) {
+    log.debug(`Reached max iframe nesting depth (${maxFrameDepth}); stopping at ${iframe.src}`);
     return [];
   }
   if (ancestorUrls && ancestorUrls.has(iframe.src)) {
@@ -114,15 +145,15 @@ async function processFrameTree(b, iframe, depth, ancestorUrls, options, percyDO
 
     log.debug(`Captured cross-origin iframe (depth ${depth}): ${iframe.src}`);
 
-    if (depth < MAX_FRAME_DEPTH) {
+    if (depth < maxFrameDepth) {
       let currentOrigin = getOrigin(iframe.src);
-      let childIframes = await b.executeScript(enumerateIframesScript);
+      let childIframes = await b.executeScript(enumerateIframesScript, ignoreSelectors);
       if (Array.isArray(childIframes)) {
         let nextAncestors = new Set(ancestorUrls || []);
         nextAncestors.add(iframe.src);
         for (let child of childIframes) {
           if (shouldSkipIframe(child, currentOrigin, log)) continue;
-          let nested = await processFrameTree(b, child, depth + 1, nextAncestors, options, percyDOMScript, log);
+          let nested = await processFrameTree(b, child, depth + 1, nextAncestors, ctx);
           if (nested.length) collected.push(...nested);
         }
       }
@@ -216,7 +247,15 @@ async function captureSerializedDOM(b, options, percyDOMScript, log) {
   }, options);
 
   try {
-    let iframeInfo = await b.executeScript(enumerateIframesScript);
+    const ignoreSelectors = resolveIgnoreSelectors(options);
+    const ctx = {
+      maxFrameDepth: resolveMaxFrameDepth(options),
+      ignoreSelectors,
+      options,
+      percyDOMScript,
+      log
+    };
+    let iframeInfo = await b.executeScript(enumerateIframesScript, ignoreSelectors);
 
     if (iframeInfo && iframeInfo.length) {
       log.debug(`Found ${iframeInfo.length} top-level iframe(s)`);
@@ -228,7 +267,7 @@ async function captureSerializedDOM(b, options, percyDOMScript, log) {
         if (shouldSkipIframe(iframe, pageOrigin, log)) continue;
         let entries;
         try {
-          entries = await processFrameTree(b, iframe, 1, new Set([url]), options, percyDOMScript, log);
+          entries = await processFrameTree(b, iframe, 1, new Set([url]), ctx);
         } catch (error) {
           if (error && error.percyContextLost) {
             log.debug('Aborting further nested CORS capture due to lost frame context');

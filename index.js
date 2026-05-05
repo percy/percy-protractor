@@ -390,8 +390,7 @@ module.exports = function percySnapshot(b, name, options) {
       await b.executeScript(percyDOMScript);
 
       // Merge .percy.yml config options with snapshot options (snapshot options take priority)
-      const configOptions = utils.percy?.config?.snapshot || {};
-      const mergedOptions = { ...configOptions, ...options };
+      const mergedOptions = utils.mergeSnapshotOptions(options);
 
       // Serialize and capture the DOM (including cross-origin iframes)
       let { domSnapshot, url } = await captureSerializedDOM(b, mergedOptions, percyDOMScript, log);

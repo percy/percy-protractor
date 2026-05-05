@@ -466,7 +466,6 @@ describe('captureSerializedDOM', () => {
 
     let scriptCalls = [];
     let parentFrameCalls = 0;
-    let defaultContentCalls = 0;
 
     let switchTo = {
       frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
@@ -475,7 +474,6 @@ describe('captureSerializedDOM', () => {
         return Promise.resolve();
       }),
       defaultContent: jasmine.createSpy('defaultContent').and.callFake(() => {
-        defaultContentCalls++;
         return Promise.resolve();
       })
     };

@@ -547,4 +547,70 @@ describe('captureSerializedDOM', () => {
     expect(result.domSnapshot).toEqual(domSnapshot);
     expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Error capturing CORS iframes/));
   });
+
+  it('aborts further sibling capture when processFrameTree throws percyContextLost', async () => {
+    // Two top-level iframes; the first throws percyContextLost from inside its
+    // recursion (mocked by making its parent-restore fail at depth>1), so the
+    // outer loop should NOT iterate the second iframe.
+    let domSnapshot = { html: '<html></html>' };
+    let outerIframes = [
+      { src: 'https://first.com/page', srcdoc: null, percyElementId: 'p-first', index: 0 },
+      { src: 'https://second.com/page', srcdoc: null, percyElementId: 'p-second', index: 1 }
+    ];
+    let firstSnapshot = { html: '<html>first</html>' };
+    let nestedInFirst = [
+      { src: 'https://nested.com/page', srcdoc: null, percyElementId: 'p-nested', index: 0 }
+    ];
+    let nestedSnapshot = { html: '<html>nested</html>' };
+
+    let scriptCalls = [];
+    let parentFrameCalls = 0;
+
+    let switchTo = {
+      frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+      parentFrame: jasmine.createSpy('parentFrame').and.callFake(() => {
+        parentFrameCalls++;
+        // Fail on the second parentFrame restore (after capturing nested) —
+        // this triggers the percyContextLost path inside processFrameTree.
+        if (parentFrameCalls === 1) return Promise.reject(new Error('parent restore failed'));
+        return Promise.resolve();
+      }),
+      defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+    };
+
+    let b = {
+      executeScript: jasmine.createSpy('executeScript').and.callFake((fn, ...args) => {
+        scriptCalls.push(typeof fn === 'function' ? fn.toString() : fn);
+        let last = scriptCalls[scriptCalls.length - 1];
+        if (last.includes('domSnapshot:')) {
+          return Promise.resolve({ domSnapshot, url: 'http://localhost:5338/host' });
+        }
+        if (last.includes("querySelectorAll('iframe')") || last.includes('querySelectorAll("iframe")')) {
+          if (scriptCalls.filter(s => s.includes('querySelectorAll')).length === 1) return Promise.resolve(outerIframes);
+          return Promise.resolve(nestedInFirst);
+        }
+        if (typeof fn === 'string') return Promise.resolve();
+        if (last.includes('PercyDOM.serialize')) {
+          let frameSerializeCalls = scriptCalls.filter(s => s.includes('PercyDOM.serialize') && !s.includes('domSnapshot:')).length;
+          if (frameSerializeCalls === 1) return Promise.resolve(firstSnapshot);
+          return Promise.resolve(nestedSnapshot);
+        }
+        return Promise.resolve();
+      }),
+      switchTo: jasmine.createSpy('switchTo').and.returnValue(switchTo)
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+
+    // The outer percyContextLost handler in captureSerializedDOM merged the
+    // partial capture and broke out of the loop without iterating second.com.
+    expect(result.domSnapshot.corsIframes).toBeDefined();
+    expect(result.domSnapshot.corsIframes.length).toBe(2); // first + nested partial
+    let frames = result.domSnapshot.corsIframes.map(f => f.frameUrl);
+    expect(frames).toContain('https://first.com/page');
+    expect(frames).toContain('https://nested.com/page');
+    expect(frames).not.toContain('https://second.com/page');
+    expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Aborting further nested CORS capture/));
+  });
 });

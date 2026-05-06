@@ -86,15 +86,15 @@ describe('processFrameTree', () => {
 
   it('returns [] when serialization yields no snapshot', async () => {
     const b = {
-      executeScript: jasmine.createSpy('exec').and.callFake(async (src) => {
+      executeScript: jasmine.createSpy('exec').and.callFake(function(src) {
         // First call is percyDOMScript injection; second is PercyDOM.serialize
-        if (typeof src === 'string') return undefined;
-        return null; // serialization returns null
+        if (typeof src === 'string') return Promise.resolve(undefined);
+        return Promise.resolve(null); // serialization returns null
       }),
       switchTo: () => ({
-        frame: async () => {},
-        parentFrame: async () => {},
-        defaultContent: async () => {}
+        frame: () => Promise.resolve(),
+        parentFrame: () => Promise.resolve(),
+        defaultContent: () => Promise.resolve()
       })
     };
     const iframe = { src: 'https://x.com', index: 0, percyElementId: 'pe' };
@@ -105,14 +105,14 @@ describe('processFrameTree', () => {
 
   it('throws percyContextLost when depth > 1 and parentFrame fails', async () => {
     const switchObj = {
-      frame: async () => {},
-      parentFrame: async () => { throw new Error('parent fail'); },
-      defaultContent: async () => {}
+      frame: () => Promise.resolve(),
+      parentFrame: () => Promise.reject(new Error('parent fail')),
+      defaultContent: () => Promise.resolve()
     };
     const b = {
-      executeScript: jasmine.createSpy('exec').and.callFake(async (src) => {
-        if (typeof src === 'string') return undefined;
-        return { html: '<html></html>' };
+      executeScript: jasmine.createSpy('exec').and.callFake(function(src) {
+        if (typeof src === 'string') return Promise.resolve(undefined);
+        return Promise.resolve({ html: '<html></html>' });
       }),
       switchTo: () => switchObj
     };
@@ -130,14 +130,14 @@ describe('processFrameTree', () => {
 
   it('does not throw percyContextLost at depth 1 when parentFrame fails', async () => {
     const switchObj = {
-      frame: async () => {},
-      parentFrame: async () => { throw new Error('parent fail at top'); },
-      defaultContent: async () => {}
+      frame: () => Promise.resolve(),
+      parentFrame: () => Promise.reject(new Error('parent fail at top')),
+      defaultContent: () => Promise.resolve()
     };
     const b = {
-      executeScript: jasmine.createSpy('exec').and.callFake(async (src) => {
-        if (typeof src === 'string') return undefined;
-        return { html: '<html></html>' };
+      executeScript: jasmine.createSpy('exec').and.callFake(function(src) {
+        if (typeof src === 'string') return Promise.resolve(undefined);
+        return Promise.resolve({ html: '<html></html>' });
       }),
       switchTo: () => switchObj
     };
@@ -158,18 +158,18 @@ describe('processFrameTree', () => {
     innerErr.partialCapture = [{ frameUrl: 'https://inner.com', iframeData: { percyElementId: 'inner' }, iframeSnapshot: { html: '' } }];
 
     const b = {
-      executeScript: jasmine.createSpy('exec').and.callFake(async (src, arg) => {
-        if (typeof src === 'string') return undefined;
+      executeScript: jasmine.createSpy('exec').and.callFake(function(src) {
+        if (typeof src === 'string') return Promise.resolve(undefined);
         if (typeof src === 'function' && src.toString().includes('PercyDOM.serialize')) {
-          return { html: '<html></html>' };
+          return Promise.resolve({ html: '<html></html>' });
         }
         // enumerateIframesScript — return one child that will throw on processing
-        return [{ src: 'https://child.com', index: 0, percyElementId: 'child', dataPercyIgnore: false, matchesIgnoreSelector: false, srcdoc: null }];
+        return Promise.resolve([{ src: 'https://child.com', index: 0, percyElementId: 'child', dataPercyIgnore: false, matchesIgnoreSelector: false, srcdoc: null }]);
       }),
       switchTo: () => ({
-        frame: async () => { throw innerErr; },
-        parentFrame: async () => {},
-        defaultContent: async () => {}
+        frame: () => Promise.reject(innerErr),
+        parentFrame: () => Promise.resolve(),
+        defaultContent: () => Promise.resolve()
       })
     };
     const iframe = { src: 'https://parent.com', index: 0, percyElementId: 'parent' };

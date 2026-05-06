@@ -5,7 +5,7 @@ const {
   resolveMaxFrameDepth,
   resolveIgnoreSelectors,
   isUnsupportedIframeSrc
-} = require('./iframe-utils');
+} = require('@percy/sdk-utils');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `${protractorPkg.name}/${protractorPkg.version}`;
 

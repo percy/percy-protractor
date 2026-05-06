@@ -250,6 +250,7 @@ async function captureSerializedDOM(b, options, percyDOMScript, log) {
             }
             break;
           }
+          /* istanbul ignore next: processFrameTree only re-throws percyContextLost; this defensive re-throw covers an unhandled future error */
           throw error;
         }
         if (entries && entries.length) corsIframes.push(...entries);

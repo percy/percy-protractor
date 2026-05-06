@@ -311,3 +311,4 @@ module.exports.getOrigin = getOrigin;
 module.exports.processFrame = processFrame;
 module.exports.captureSerializedDOM = captureSerializedDOM;
 module.exports.shouldSkipIframe = shouldSkipIframe;
+module.exports.processFrameTree = processFrameTree;

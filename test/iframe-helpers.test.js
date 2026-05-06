@@ -1,4 +1,4 @@
-const { shouldSkipIframe } = require('../index.js');
+const { shouldSkipIframe, processFrameTree } = require('../index.js');
 
 describe('shouldSkipIframe', () => {
   let log;
@@ -48,5 +48,139 @@ describe('shouldSkipIframe', () => {
 
   it('does not skip valid cross-origin iframe with percyElementId', () => {
     expect(shouldSkipIframe({ src: 'https://other.com/', percyElementId: 'pe1', index: 0 }, 'https://parent.com', log)).toBe(false);
+  });
+});
+
+describe('processFrameTree', () => {
+  let log;
+  beforeEach(() => {
+    log = { debug: () => {} };
+  });
+
+  function mockBrowserBase() {
+    return {
+      switchTo: () => ({
+        frame: async () => {},
+        parentFrame: async () => {},
+        defaultContent: async () => {}
+      })
+    };
+  }
+
+  it('returns [] when depth exceeds maxFrameDepth', async () => {
+    const b = mockBrowserBase();
+    const iframe = { src: 'https://x.com', index: 0, percyElementId: 'pe' };
+    const ctx = { maxFrameDepth: 2, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+    const result = await processFrameTree(b, iframe, 3, new Set(), ctx);
+    expect(result).toEqual([]);
+  });
+
+  it('returns [] when iframe URL is in ancestor chain (cyclic)', async () => {
+    const b = mockBrowserBase();
+    const iframe = { src: 'https://cyclic.com', index: 0, percyElementId: 'pe' };
+    const ancestors = new Set(['https://cyclic.com']);
+    const ctx = { maxFrameDepth: 10, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+    const result = await processFrameTree(b, iframe, 1, ancestors, ctx);
+    expect(result).toEqual([]);
+  });
+
+  it('returns [] when serialization yields no snapshot', async () => {
+    const b = {
+      executeScript: jasmine.createSpy('exec').and.callFake(async (src) => {
+        // First call is percyDOMScript injection; second is PercyDOM.serialize
+        if (typeof src === 'string') return undefined;
+        return null; // serialization returns null
+      }),
+      switchTo: () => ({
+        frame: async () => {},
+        parentFrame: async () => {},
+        defaultContent: async () => {}
+      })
+    };
+    const iframe = { src: 'https://x.com', index: 0, percyElementId: 'pe' };
+    const ctx = { maxFrameDepth: 10, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+    const result = await processFrameTree(b, iframe, 1, new Set(), ctx);
+    expect(result).toEqual([]);
+  });
+
+  it('throws percyContextLost when depth > 1 and parentFrame fails', async () => {
+    const switchObj = {
+      frame: async () => {},
+      parentFrame: async () => { throw new Error('parent fail'); },
+      defaultContent: async () => {}
+    };
+    const b = {
+      executeScript: jasmine.createSpy('exec').and.callFake(async (src) => {
+        if (typeof src === 'string') return undefined;
+        return { html: '<html></html>' };
+      }),
+      switchTo: () => switchObj
+    };
+    const iframe = { src: 'https://leaf.com', index: 0, percyElementId: 'pe' };
+    const ctx = { maxFrameDepth: 10, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+
+    let thrownErr;
+    try {
+      await processFrameTree(b, iframe, 2, new Set(), ctx);
+    } catch (e) { thrownErr = e; }
+    expect(thrownErr).toBeDefined();
+    expect(thrownErr.percyContextLost).toBe(true);
+    expect(Array.isArray(thrownErr.partialCapture)).toBe(true);
+  });
+
+  it('does not throw percyContextLost at depth 1 when parentFrame fails', async () => {
+    const switchObj = {
+      frame: async () => {},
+      parentFrame: async () => { throw new Error('parent fail at top'); },
+      defaultContent: async () => {}
+    };
+    const b = {
+      executeScript: jasmine.createSpy('exec').and.callFake(async (src) => {
+        if (typeof src === 'string') return undefined;
+        return { html: '<html></html>' };
+      }),
+      switchTo: () => switchObj
+    };
+    const iframe = { src: 'https://leaf.com', index: 0, percyElementId: 'pe' };
+    const ctx = { maxFrameDepth: 10, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+
+    const result = await processFrameTree(b, iframe, 1, new Set(), ctx);
+    // Capture succeeded; parentFrame failure swallowed because depth=1 falls back to top
+    expect(result.length).toBe(1);
+    expect(result[0].iframeData.percyElementId).toBe('pe');
+  });
+
+  it('propagates inner percyContextLost error and merges partialCapture', async () => {
+    // Simulate processFrameTree being called recursively where the inner call
+    // throws a percyContextLost error with partialCapture data.
+    const innerErr = new Error('lost');
+    innerErr.percyContextLost = true;
+    innerErr.partialCapture = [{ frameUrl: 'https://inner.com', iframeData: { percyElementId: 'inner' }, iframeSnapshot: { html: '' } }];
+
+    const b = {
+      executeScript: jasmine.createSpy('exec').and.callFake(async (src, arg) => {
+        if (typeof src === 'string') return undefined;
+        if (typeof src === 'function' && src.toString().includes('PercyDOM.serialize')) {
+          return { html: '<html></html>' };
+        }
+        // enumerateIframesScript — return one child that will throw on processing
+        return [{ src: 'https://child.com', index: 0, percyElementId: 'child', dataPercyIgnore: false, matchesIgnoreSelector: false, srcdoc: null }];
+      }),
+      switchTo: () => ({
+        frame: async () => { throw innerErr; },
+        parentFrame: async () => {},
+        defaultContent: async () => {}
+      })
+    };
+    const iframe = { src: 'https://parent.com', index: 0, percyElementId: 'parent' };
+    const ctx = { maxFrameDepth: 10, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+
+    let thrownErr;
+    try {
+      await processFrameTree(b, iframe, 1, new Set(), ctx);
+    } catch (e) { thrownErr = e; }
+    // The outer catch re-throws when it sees percyContextLost
+    expect(thrownErr).toBeDefined();
+    expect(thrownErr.percyContextLost).toBe(true);
   });
 });

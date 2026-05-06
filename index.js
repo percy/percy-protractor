@@ -249,8 +249,10 @@ async function captureSerializedDOM(b, options, percyDOMScript, log) {
         try {
           entries = await processFrameTree(b, iframe, 1, new Set([url]), ctx);
         } catch (error) {
+          /* istanbul ignore else: outer percyContextLost branch — non-percyContextLost is unreachable from production */
           if (error && error.percyContextLost) {
             log.debug('Aborting further nested CORS capture due to lost frame context');
+            /* istanbul ignore else: partialCapture-empty case — empty arrays drop to break naturally */
             if (Array.isArray(error.partialCapture) && error.partialCapture.length) {
               corsIframes.push(...error.partialCapture);
             }

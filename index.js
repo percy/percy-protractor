@@ -5,7 +5,7 @@ const {
   resolveMaxFrameDepth,
   resolveIgnoreSelectors,
   isUnsupportedIframeSrc
-} = require('@percy/sdk-utils');
+} = require('./_iframe_shim');
 const CLIENT_INFO = `${sdkPkg.name}/${sdkPkg.version}`;
 const ENV_INFO = `${protractorPkg.name}/${protractorPkg.version}`;
 
@@ -98,6 +98,23 @@ async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
     await b.switchTo().frame(iframe.index);
     switchedIn = true;
 
+    // Post-switch URL re-check (feature #5): a frame's `src` attribute may
+    // point somewhere reachable but the actual loaded document can be
+    // about:blank, a net-error page, or have redirected to an unsupported
+    // scheme. Read document.URL from inside the frame and bail if it's
+    // unsupported so we don't serialize garbage.
+    let frameUrl;
+    try {
+      frameUrl = await b.executeScript(function() { return document.URL; });
+    } catch (urlErr) {
+      log.debug(`Could not read document.URL inside frame ${iframe.src}: ${urlErr.message}`);
+      frameUrl = null;
+    }
+    if (frameUrl && isUnsupportedIframeSrc(frameUrl)) {
+      log.debug(`Skipping iframe whose document loaded an unsupported URL: ${frameUrl}`);
+      return [];
+    }
+
     await b.executeScript(percyDOMScript);
 
     /* istanbul ignore next: no instrumenting injected code */
@@ -112,22 +129,27 @@ async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
     }
 
     collected.push({
-      frameUrl: iframe.src,
+      frameUrl: frameUrl || iframe.src,
       iframeData: { percyElementId: iframe.percyElementId },
       iframeSnapshot
     });
 
-    log.debug(`Captured cross-origin iframe (depth ${depth}): ${iframe.src}`);
+    log.debug(`Captured cross-origin iframe (depth ${depth}): ${frameUrl || iframe.src}`);
 
     /* istanbul ignore else: depth==maxFrameDepth boundary — recursion stops at next level */
     if (depth < maxFrameDepth) {
-      let currentOrigin = getOrigin(iframe.src);
+      // Compare child origins against the *post-switch* URL, not the
+      // attribute src. Redirects can change the effective origin.
+      let currentOrigin = getOrigin(frameUrl || iframe.src);
       let childIframes = await b.executeScript(enumerateIframesScript, ignoreSelectors);
       /* istanbul ignore else: enumerateIframesScript always returns an array */
       if (Array.isArray(childIframes)) {
         /* istanbul ignore next: ancestorUrls is always passed as a Set by captureSerializedDOM */
         let nextAncestors = new Set(ancestorUrls || []);
+        // Track BOTH the attribute src and the post-switch URL so a redirect
+        // chain (A → B → A) is detected as cyclic.
         nextAncestors.add(iframe.src);
+        if (frameUrl) nextAncestors.add(frameUrl);
         for (let child of childIframes) {
           if (shouldSkipIframe(child, currentOrigin, log)) continue;
           let nested = await processFrameTree(b, child, depth + 1, nextAncestors, ctx);
@@ -165,15 +187,16 @@ async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
       } catch (e) {
         log.debug(`Failed to switch back to parent frame: ${e.message}`);
         try { await b.switchTo().defaultContent(); } catch (_) {}
-        if (depth > 1) {
-          const err = new Error(`Lost parent frame context: ${e.message}`);
-          err.percyContextLost = true;
-          err.partialCapture = collected;
-          /* istanbul ignore next: capturedError-cause merge fires only on rare combined inner failure + parent-restore failure */
-          if (capturedError) err.cause = capturedError;
-          // eslint-disable-next-line no-unsafe-finally
-          throw err;
-        }
+        // Signal regardless of depth — even at depth==1 the outer iterator
+        // is holding iframe handles resolved against the previous parent
+        // context; continuing would mis-resolve their percyElementIds.
+        const err = new Error(`Lost parent frame context: ${e.message}`);
+        err.percyContextLost = true;
+        err.partialCapture = collected;
+        /* istanbul ignore next: capturedError-cause merge fires only on rare combined inner failure + parent-restore failure */
+        if (capturedError) err.cause = capturedError;
+        // eslint-disable-next-line no-unsafe-finally
+        throw err;
       }
     }
   }

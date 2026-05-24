@@ -162,6 +162,7 @@ async function processFrameTree(b, iframeElement, iframe, depth, ancestorUrls, c
     // unsupported so we don't serialize garbage.
     let frameUrl;
     try {
+      /* istanbul ignore next: injected into the page, not part of coverage */
       frameUrl = await b.executeScript(function() { return document.URL; });
     } catch (urlErr) {
       log.debug(`Could not read document.URL inside frame ${iframe.src}: ${urlErr.message}`);

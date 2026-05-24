@@ -1,4 +1,5 @@
 const { shouldSkipIframe, processFrameTree, findIframeByPercyId } = require('../index.js');
+const shim = require('../_iframe_shim.js');
 
 // A placeholder representing a Selenium WebElement handle. processFrameTree
 // passes it back to switchTo().frame() and our mocks below ignore the value.
@@ -212,9 +213,9 @@ describe('processFrameTree', () => {
 
   it('bails when post-switch document.URL is unsupported and returns []', async () => {
     // Frame's static src attribute is fine (https), but after switching in,
-    // the document loaded chrome-error://chromewebdata/ — a failed-navigation
-    // surrogate. The function must drop the entry, restore the parent, and
-    // return an empty array. This is the "post-switch URL bail" path.
+    // the document loaded about:blank — a failed-navigation surrogate. The
+    // function must drop the entry, restore the parent, and return an empty
+    // array. This is the "post-switch URL bail" path.
     const switchObj = {
       frame: () => Promise.resolve(),
       parentFrame: jasmine.createSpy('parentFrame').and.returnValue(Promise.resolve()),
@@ -224,7 +225,7 @@ describe('processFrameTree', () => {
       executeScript: jasmine.createSpy('exec').and.callFake(function(arg) {
         if (typeof arg === 'string') return Promise.resolve(undefined);
         if (typeof arg === 'function' && arg.toString().includes('document.URL')) {
-          return Promise.resolve('chrome-error://chromewebdata/');
+          return Promise.resolve('about:blank');
         }
         // No further calls should reach PercyDOM.serialize once we bail.
         throw new Error('unexpected executeScript call after bail');
@@ -404,5 +405,104 @@ describe('findIframeByPercyId', () => {
     const result = await findIframeByPercyId(b, 'abc', log);
     expect(result).toBeNull();
     expect(log.debug).toHaveBeenCalledWith(jasmine.stringMatching(/Could not locate iframe/));
+  });
+});
+
+describe('_iframe_shim', () => {
+  describe('resolveIgnoreSelectors', () => {
+    it('returns [] when no selectors are set', () => {
+      expect(shim.resolveIgnoreSelectors({})).toEqual([]);
+      expect(shim.resolveIgnoreSelectors()).toEqual([]);
+    });
+
+    it('returns the array unchanged when an array of strings is passed', () => {
+      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: ['.a', '.b'] })).toEqual(['.a', '.b']);
+    });
+
+    it('filters out non-string and empty entries from an array', () => {
+      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: ['.a', '', null, 7, '.b'] })).toEqual(['.a', '.b']);
+    });
+
+    it('wraps a single string selector in an array', () => {
+      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: '.solo' })).toEqual(['.solo']);
+    });
+
+    it('returns [] for an empty string selector', () => {
+      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: '' })).toEqual([]);
+    });
+
+    it('falls back to the legacy ignoreSelectors key', () => {
+      expect(shim.resolveIgnoreSelectors({ ignoreSelectors: ['.legacy'] })).toEqual(['.legacy']);
+    });
+
+    it('returns [] for unsupported types (number, object, boolean)', () => {
+      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: 42 })).toEqual([]);
+      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: { a: 1 } })).toEqual([]);
+      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: true })).toEqual([]);
+    });
+  });
+
+  describe('normalizeIgnoreSelectors', () => {
+    it('is an alias of resolveIgnoreSelectors', () => {
+      expect(shim.normalizeIgnoreSelectors({ ignoreIframeSelectors: ['.x'] })).toEqual(['.x']);
+      expect(shim.normalizeIgnoreSelectors()).toEqual([]);
+    });
+  });
+
+  describe('resolveMaxFrameDepth', () => {
+    // sdk-utils exposes DEFAULT_MAX_IFRAME_DEPTH / HARD_MAX_IFRAME_DEPTH;
+    // pull them at runtime so this test tracks the dependency rather than
+    // hardcoding numbers that will drift when sdk-utils bumps.
+    const utils = require('@percy/sdk-utils');
+    const DEFAULT = utils.DEFAULT_MAX_IFRAME_DEPTH ?? 10;
+    const HARD = utils.HARD_MAX_IFRAME_DEPTH ?? 25;
+
+    it('returns the default when not supplied', () => {
+      expect(shim.resolveMaxFrameDepth({})).toBe(DEFAULT);
+      expect(shim.resolveMaxFrameDepth()).toBe(DEFAULT);
+    });
+
+    it('returns the explicit value when within range', () => {
+      const inRange = Math.min(DEFAULT, HARD);
+      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: inRange })).toBe(inRange);
+    });
+
+    it('accepts the legacy maxIframeDepth key', () => {
+      const inRange = Math.min(DEFAULT, HARD);
+      expect(shim.resolveMaxFrameDepth({ maxIframeDepth: inRange })).toBe(inRange);
+    });
+
+    it('clamps negative values up to 0', () => {
+      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: -5 })).toBe(0);
+    });
+
+    it('clamps overflow values down to the hard cap', () => {
+      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: HARD + 1000 })).toBe(HARD);
+    });
+
+    it('falls back to default when value is not numeric', () => {
+      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: 'banana' })).toBe(DEFAULT);
+    });
+  });
+
+  describe('isUnsupportedIframeSrc', () => {
+    it('returns true for null/empty', () => {
+      expect(shim.isUnsupportedIframeSrc(null)).toBe(true);
+      expect(shim.isUnsupportedIframeSrc('')).toBe(true);
+    });
+
+    it('returns true for browser-internal and legacy schemes', () => {
+      expect(shim.isUnsupportedIframeSrc('about:blank')).toBe(true);
+      expect(shim.isUnsupportedIframeSrc('javascript:void(0)')).toBe(true);
+      expect(shim.isUnsupportedIframeSrc('data:text/html,foo')).toBe(true);
+      expect(shim.isUnsupportedIframeSrc('blob:http://example.com/x')).toBe(true);
+      expect(shim.isUnsupportedIframeSrc('vbscript:msgbox')).toBe(true);
+      expect(shim.isUnsupportedIframeSrc('file:///etc/passwd')).toBe(true);
+    });
+
+    it('returns false for http(s)', () => {
+      expect(shim.isUnsupportedIframeSrc('http://example.com')).toBe(false);
+      expect(shim.isUnsupportedIframeSrc('https://example.com/page')).toBe(false);
+    });
   });
 });

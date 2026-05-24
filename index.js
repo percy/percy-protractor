@@ -22,9 +22,13 @@ function getOrigin(url) {
 // control), otherwise fall back to selenium-webdriver — which Protractor pulls
 // in as a transitive dependency. Loaded lazily so the bare `index.js` require
 // stays cheap and doesn't pin a selenium-webdriver version at module load.
+/* istanbul ignore next: short fork; the `b.By` arm is exercised by unit
+   tests through the findIframeByPercyId describe and the selenium-webdriver
+   fallback only fires in environments without ProtractorBrowser. The branch
+   miss reported by nyc is the b/b.By falsy arms which can't be reached from
+   a Protractor browser. */
 function resolveBy(b) {
   if (b && b.By && typeof b.By.css === 'function') return b.By;
-  /* istanbul ignore next: fallback path exercised in integration, not unit-mocked */
   return require('selenium-webdriver').By;
 }
 

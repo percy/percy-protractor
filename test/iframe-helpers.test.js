@@ -360,6 +360,80 @@ describe('processFrameTree', () => {
     expect(ids).toContain('outer');
     expect(ids).toContain('gc');
   });
+
+  it('falls back to iframe.src when post-switch document.URL is unreadable', async () => {
+    // Some browsers reject executeScript for frames in error states.
+    // processFrameTree must keep going (the iframe is still capturable;
+    // we only skip if the URL it ended up on is unsupported), tag the
+    // collected entry with iframe.src as the fallback frameUrl, and NOT
+    // add a `null` URL into the cyclic-ancestor set. Covers both the
+    // try/catch around document.URL and the `if (frameUrl) ...add` arm.
+    const b = {
+      executeScript: jasmine.createSpy('exec').and.callFake(function(arg) {
+        if (typeof arg === 'string') return Promise.resolve(undefined);
+        if (typeof arg === 'function' && arg.toString().includes('document.URL')) {
+          return Promise.reject(new Error('frame unavailable'));
+        }
+        if (typeof arg === 'function' && arg.toString().includes('PercyDOM.serialize')) {
+          return Promise.resolve({ html: '<x/>' });
+        }
+        return Promise.resolve([]); // no nested children
+      }),
+      switchTo: () => ({
+        frame: () => Promise.resolve(),
+        parentFrame: () => Promise.resolve(),
+        defaultContent: () => Promise.resolve()
+      })
+    };
+    const iframe = { src: 'https://still-good.com/x', index: 0, percyElementId: 'pe' };
+    const ctx = { maxFrameDepth: 10, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+    const result = await processFrameTree(b, FAKE_ELEMENT, iframe, 1, new Set(), ctx);
+    expect(result.length).toBe(1);
+    expect(result[0].frameUrl).toBe('https://still-good.com/x');
+  });
+
+  it('skips nested children whose percyElementId lookup returns null', async () => {
+    // When findIframeByPercyId can't resolve the WebElement for a child
+    // iframe (e.g. it was removed between enumeration and lookup) we MUST
+    // continue past it instead of attempting a switchTo() with a null
+    // handle. This guards the `if (!childElement) continue;` branch.
+    let urlCalls = 0;
+    const b = {
+      executeScript: jasmine.createSpy('exec').and.callFake(function(arg) {
+        if (typeof arg === 'string') return Promise.resolve(undefined);
+        if (typeof arg === 'function' && arg.toString().includes('document.URL')) {
+          urlCalls++;
+          return Promise.resolve('https://parent.com/page');
+        }
+        if (typeof arg === 'function' && arg.toString().includes('PercyDOM.serialize')) {
+          return Promise.resolve({ html: '<parent/>' });
+        }
+        // enumerateIframesScript — one missing child
+        return Promise.resolve([{
+          src: 'https://missing.com',
+          srcdoc: null,
+          percyElementId: 'missing',
+          dataPercyIgnore: false,
+          matchesIgnoreSelector: false,
+          index: 0
+        }]);
+      }),
+      findElement: jasmine.createSpy('findElement').and.returnValue(Promise.reject(new Error('not found'))),
+      By: { css: (s) => s },
+      switchTo: () => ({
+        frame: () => Promise.resolve(),
+        parentFrame: () => Promise.resolve(),
+        defaultContent: () => Promise.resolve()
+      })
+    };
+    const iframe = { src: 'https://parent.com/page', index: 0, percyElementId: 'parent' };
+    const ctx = { maxFrameDepth: 10, ignoreSelectors: [], options: {}, percyDOMScript: '', log };
+    const result = await processFrameTree(b, FAKE_ELEMENT, iframe, 1, new Set(), ctx);
+    // Parent capture succeeded; the missing child contributes nothing.
+    expect(result.length).toBe(1);
+    expect(result[0].iframeData.percyElementId).toBe('parent');
+    expect(urlCalls).toBe(1);
+  });
 });
 
 describe('findIframeByPercyId', () => {

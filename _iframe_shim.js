@@ -12,7 +12,12 @@ const BROWSER_INTERNAL_PREFIXES = [
 
 function resolveMaxFrameDepth(options = {}) {
   const requested = options.maxFrameDepth ?? options.maxIframeDepth;
+  // sdk-utils >= 1.31.14-beta.4 provides DEFAULT_MAX_IFRAME_DEPTH and
+  // HARD_MAX_IFRAME_DEPTH. The `?? N` arms only fire on older sdk-utils
+  // versions, hence defensive.
+  /* istanbul ignore next: defensive fallback for older @percy/sdk-utils */
   const def = utils.DEFAULT_MAX_IFRAME_DEPTH ?? 10;
+  /* istanbul ignore next: defensive fallback for older @percy/sdk-utils */
   const hard = utils.HARD_MAX_IFRAME_DEPTH ?? 25;
   const value = requested == null ? def : Number(requested);
   if (Number.isNaN(value)) return def;
@@ -23,7 +28,9 @@ function resolveIgnoreSelectors(options = {}) {
   const sel = options.ignoreIframeSelectors ?? options.ignoreSelectors;
   if (!sel) return [];
   if (Array.isArray(sel)) return sel.filter(s => typeof s === 'string' && s.length);
-  if (typeof sel === 'string') return sel ? [sel] : [];
+  // `!sel` above already filtered empty strings, so a string here is
+  // guaranteed non-empty.
+  if (typeof sel === 'string') return [sel];
   return [];
 }
 

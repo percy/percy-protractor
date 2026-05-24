@@ -553,6 +553,40 @@ describe('captureSerializedDOM', () => {
     expect(parentFrameCalls).toBe(2);
   });
 
+  it('skips a top-level iframe whose percyElementId lookup returns null', async () => {
+    // captureSerializedDOM enumerates iframes, then attempts a
+    // findIframeByPercyId on each. If the lookup returns null (handle gone
+    // before the switch), the outer loop must `continue;` rather than try
+    // to switch into a non-existent frame.
+    let domSnapshot = { html: '<html></html>' };
+    let iframes = [
+      { src: 'https://gone.com/frame', srcdoc: null, percyElementId: 'gone', index: 0 }
+    ];
+    let callCount = 0;
+    let b = {
+      executeScript: jasmine.createSpy('executeScript').and.callFake(() => {
+        callCount++;
+        if (callCount === 1) return Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' });
+        if (callCount === 2) return Promise.resolve(iframes);
+        // No further scripts should execute — we never switch in.
+        throw new Error('unexpected executeScript after lookup-null skip');
+      }),
+      findElement: jasmine.createSpy('findElement').and.returnValue(Promise.reject(new Error('not in DOM'))),
+      By: { css: (s) => s },
+      switchTo: jasmine.createSpy('switchTo').and.returnValue({
+        frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        parentFrame: jasmine.createSpy('parentFrame').and.returnValue(Promise.resolve()),
+        defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
+      })
+    };
+    let log = mockLog();
+
+    let result = await captureSerializedDOM(b, {}, 'percyDOMScript', log);
+    // findElement was called, frame() never was, and corsIframes stays unset.
+    expect(b.findElement).toHaveBeenCalled();
+    expect(result.domSnapshot.corsIframes).toBeUndefined();
+  });
+
   it('handles errors during CORS iframe processing gracefully', async () => {
     let domSnapshot = { html: '<html></html>' };
     let b = {

@@ -17,6 +17,46 @@ function getOrigin(url) {
   }
 }
 
+// Resolve a Selenium `By` builder. Prefer one hung off the browser object (so
+// tests can inject a mock and library users on bespoke browser wrappers retain
+// control), otherwise fall back to selenium-webdriver — which Protractor pulls
+// in as a transitive dependency. Loaded lazily so the bare `index.js` require
+// stays cheap and doesn't pin a selenium-webdriver version at module load.
+function resolveBy(b) {
+  if (b && b.By && typeof b.By.css === 'function') return b.By;
+  /* istanbul ignore next: fallback path exercised in integration, not unit-mocked */
+  return require('selenium-webdriver').By;
+}
+
+// CSS-escape the percyElementId before embedding it into an attribute selector.
+// PercyDOM emits UUID-like ids in practice, but we still escape backslashes and
+// double-quotes defensively so a non-UUID value cannot break the selector or
+// open an injection vector. Mirrors what percy-selenium-ruby does.
+function escapeForAttrSelector(value) {
+  return String(value).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+// Look up an <iframe> WebElement by its `data-percy-element-id` attribute.
+//
+// Using a stable identifier instead of a numeric index into the live iframe
+// collection eliminates a real race window: PercyDOM.serialize on the parent
+// document can clone/rewrite nodes (canvas, input, style) and any DOM
+// mutation between `enumerateIframesScript` and the subsequent
+// `switchTo().frame(index)` would silently shuffle index->element mappings,
+// shipping one iframe's content under a different iframe's percyElementId.
+// Mirrors percy-selenium-ruby's `find_iframe_by_percy_id`.
+async function findIframeByPercyId(b, percyElementId, log) {
+  if (!percyElementId) return null;
+  try {
+    const By = resolveBy(b);
+    const escaped = escapeForAttrSelector(percyElementId);
+    return await b.findElement(By.css(`iframe[data-percy-element-id="${escaped}"]`));
+  } catch (e) {
+    log.debug(`Could not locate iframe by percyElementId ${percyElementId}: ${e.message}`);
+    return null;
+  }
+}
+
 function shouldSkipIframe(iframe, currentOrigin, log) {
   if (iframe.dataPercyIgnore) {
     log.debug(`Skipping iframe marked with data-percy-ignore: ${iframe.src || '(no src)'}`);
@@ -78,7 +118,14 @@ function enumerateIframesScript(selectors) {
 // recurses into any cross-origin iframes nested inside it. Returns a flat
 // array of corsIframes entries (one per cross-origin frame at any depth).
 // Bounded by MAX_FRAME_DEPTH to prevent runaway recursion.
-async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
+//
+// `iframeElement` is the WebElement handle obtained via
+// `findIframeByPercyId`. Switching by element handle (instead of the numeric
+// index returned by `enumerateIframesScript`) protects against DOM mutations
+// performed by PercyDOM.serialize on the parent document between enumeration
+// and switching, which would otherwise cause us to ship one iframe's content
+// under another iframe's percyElementId.
+async function processFrameTree(b, iframeElement, iframe, depth, ancestorUrls, ctx) {
   const { maxFrameDepth, ignoreSelectors, options, percyDOMScript, log } = ctx;
   if (depth > maxFrameDepth) {
     log.debug(`Reached max iframe nesting depth (${maxFrameDepth}); stopping at ${iframe.src}`);
@@ -88,6 +135,11 @@ async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
     log.debug(`Skipping cyclic iframe (${iframe.src} appears in ancestor chain)`);
     return [];
   }
+  /* istanbul ignore if: defensive — captureSerializedDOM skips entries with a null element before calling */
+  if (!iframeElement) {
+    log.debug(`No iframe element handle for ${iframe.src}; skipping`);
+    return [];
+  }
 
   const collected = [];
   let switchedIn = false;
@@ -95,7 +147,8 @@ async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
   try {
     log.debug(`Processing cross-origin iframe (depth ${depth}): ${iframe.src}`);
 
-    await b.switchTo().frame(iframe.index);
+    // Switch by element handle — see comment above the function signature.
+    await b.switchTo().frame(iframeElement);
     switchedIn = true;
 
     // Post-switch URL re-check (feature #5): a frame's `src` attribute may
@@ -152,7 +205,12 @@ async function processFrameTree(b, iframe, depth, ancestorUrls, ctx) {
         if (frameUrl) nextAncestors.add(frameUrl);
         for (let child of childIframes) {
           if (shouldSkipIframe(child, currentOrigin, log)) continue;
-          let nested = await processFrameTree(b, child, depth + 1, nextAncestors, ctx);
+          // Resolve the WebElement here too — see findIframeByPercyId comment
+          // for why a stable id is safer than the numeric index from
+          // enumerateIframesScript inside a nested context.
+          let childElement = await findIframeByPercyId(b, child.percyElementId, log);
+          if (!childElement) continue;
+          let nested = await processFrameTree(b, childElement, child, depth + 1, nextAncestors, ctx);
           /* istanbul ignore else: nested-empty case skipped; covered by depth-max integration */
           if (nested.length) collected.push(...nested);
         }
@@ -268,9 +326,18 @@ async function captureSerializedDOM(b, options, percyDOMScript, log) {
 
       for (let iframe of iframeInfo) {
         if (shouldSkipIframe(iframe, pageOrigin, log)) continue;
+        // Resolve a stable WebElement handle for this iframe by its
+        // data-percy-element-id attribute BEFORE switching. The numeric `index`
+        // returned by enumerateIframesScript was captured against the live
+        // document; if PercyDOM serialization (or any other consumer) mutates
+        // the iframe collection between enumeration and switching, an index
+        // would land us in the wrong frame. A stable id lookup eliminates
+        // that race.
+        let iframeElement = await findIframeByPercyId(b, iframe.percyElementId, log);
+        if (!iframeElement) continue;
         let entries;
         try {
-          entries = await processFrameTree(b, iframe, 1, new Set([url]), ctx);
+          entries = await processFrameTree(b, iframeElement, iframe, 1, new Set([url]), ctx);
         } catch (error) {
           /* istanbul ignore else: outer percyContextLost branch — non-percyContextLost is unreachable from production */
           if (error && error.percyContextLost) {
@@ -344,3 +411,4 @@ module.exports.processFrame = processFrame;
 module.exports.captureSerializedDOM = captureSerializedDOM;
 module.exports.shouldSkipIframe = shouldSkipIframe;
 module.exports.processFrameTree = processFrameTree;
+module.exports.findIframeByPercyId = findIframeByPercyId;

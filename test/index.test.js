@@ -399,17 +399,32 @@ describe('captureSerializedDOM', () => {
     let iframes = [
       { src: 'https://other.com/frame', srcdoc: null, percyElementId: 'abc123', index: 0 }
     ];
+    // captureSerializedDOM call sequence:
+    //   1) executeScript(top-level serialize+url)
+    //   2) executeScript(enumerateIframesScript)
+    //   3) findElement(By.css(...))      <-- new lookup-by-id step
+    //   4) switchTo().frame(element)
+    //   5) executeScript(document.URL)
+    //   6) executeScript(percyDOMScript)  // inject
+    //   7) executeScript(PercyDOM.serialize) // frame snapshot
+    //   8) executeScript(enumerateIframesScript) // children
+    //   9) switchTo().parentFrame()
     let callCount = 0;
     let b = {
-      executeScript: jasmine.createSpy('executeScript').and.callFake(() => {
+      executeScript: jasmine.createSpy('executeScript').and.callFake((arg) => {
         callCount++;
         if (callCount === 1) return Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' });
         if (callCount === 2) return Promise.resolve(iframes);
-        if (callCount === 3) return Promise.resolve(); // inject PercyDOM
-        return Promise.resolve(iframeSnapshot); // serialize frame
+        if (callCount === 3) return Promise.resolve('https://other.com/frame'); // document.URL
+        if (callCount === 4) return Promise.resolve(); // inject PercyDOM
+        if (callCount === 5) return Promise.resolve(iframeSnapshot); // serialize frame
+        return Promise.resolve([]); // child enumeration: none
       }),
+      findElement: jasmine.createSpy('findElement').and.returnValue(Promise.resolve({ __fakeElement: true })),
+      By: { css: (s) => s },
       switchTo: jasmine.createSpy('switchTo').and.returnValue({
         frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+        parentFrame: jasmine.createSpy('parentFrame').and.returnValue(Promise.resolve()),
         defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
       })
     };
@@ -433,6 +448,7 @@ describe('captureSerializedDOM', () => {
     let callCount = 0;
     let switchTo = {
       frame: jasmine.createSpy('frame').and.returnValue(Promise.resolve()),
+      parentFrame: jasmine.createSpy('parentFrame').and.returnValue(Promise.resolve()),
       defaultContent: jasmine.createSpy('defaultContent').and.returnValue(Promise.resolve())
     };
     let b = {
@@ -440,9 +456,11 @@ describe('captureSerializedDOM', () => {
         callCount++;
         if (callCount === 1) return Promise.resolve({ domSnapshot, url: 'http://localhost:5338/test' });
         if (callCount === 2) return Promise.resolve(iframes);
-        // processFrame's executeScript calls - fail on inject
+        // Subsequent executeScript calls inside processFrameTree fail
         return Promise.reject(new Error('inject failed'));
       }),
+      findElement: jasmine.createSpy('findElement').and.returnValue(Promise.resolve({ __fakeElement: true })),
+      By: { css: (s) => s },
       switchTo: jasmine.createSpy('switchTo').and.returnValue(switchTo)
     };
     let log = mockLog();
@@ -495,6 +513,12 @@ describe('captureSerializedDOM', () => {
         }
         // 3/5) percyDOMScript injection (passed as a string)
         if (typeof fn === 'string') return Promise.resolve();
+        // document.URL probe inside frame
+        if (last.includes('document.URL')) {
+          let urlCalls = scriptCalls.filter(s => s.includes('document.URL') && !s.includes('domSnapshot:')).length;
+          if (urlCalls === 1) return Promise.resolve('https://outer.com/page');
+          return Promise.resolve('https://inner.com/page');
+        }
         // PercyDOM.serialize call inside a frame (top-level serialize is matched
         // earlier via the 'domSnapshot:' marker, so any remaining serialize
         // call is from a nested frame).
@@ -505,6 +529,8 @@ describe('captureSerializedDOM', () => {
         }
         return Promise.resolve();
       }),
+      findElement: jasmine.createSpy('findElement').and.returnValue(Promise.resolve({ __fakeElement: true })),
+      By: { css: (s) => s },
       switchTo: jasmine.createSpy('switchTo').and.returnValue(switchTo)
     };
     let log = mockLog();
@@ -590,6 +616,11 @@ describe('captureSerializedDOM', () => {
           return Promise.resolve(nestedInFirst);
         }
         if (typeof fn === 'string') return Promise.resolve();
+        if (last.includes('document.URL')) {
+          let urlCalls = scriptCalls.filter(s => s.includes('document.URL') && !s.includes('domSnapshot:')).length;
+          if (urlCalls === 1) return Promise.resolve('https://first.com/page');
+          return Promise.resolve('https://nested.com/page');
+        }
         if (last.includes('PercyDOM.serialize')) {
           let frameSerializeCalls = scriptCalls.filter(s => s.includes('PercyDOM.serialize') && !s.includes('domSnapshot:')).length;
           if (frameSerializeCalls === 1) return Promise.resolve(firstSnapshot);
@@ -597,6 +628,8 @@ describe('captureSerializedDOM', () => {
         }
         return Promise.resolve();
       }),
+      findElement: jasmine.createSpy('findElement').and.returnValue(Promise.resolve({ __fakeElement: true })),
+      By: { css: (s) => s },
       switchTo: jasmine.createSpy('switchTo').and.returnValue(switchTo)
     };
     let log = mockLog();

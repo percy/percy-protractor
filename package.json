@@ -27,13 +27,13 @@
     "test:types": "tsd"
   },
   "dependencies": {
-    "@percy/sdk-utils": "^1.0.0"
+    "@percy/sdk-utils": "1.31.14-beta.4"
   },
   "peerDependencies": {
     "protractor": "~7"
   },
   "devDependencies": {
-    "@percy/cli": "^1.10.4",
+    "@percy/cli": "1.31.14",
     "eslint": "^7.11.0",
     "eslint-config-standard": "^16.0.1",
     "eslint-plugin-import": "^2.22.1",
@@ -45,5 +45,6 @@
     "nyc": "^15.1.0",
     "protractor": "^7.0.0",
     "tsd": "^0.24.1"
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

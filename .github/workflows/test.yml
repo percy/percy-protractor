@@ -38,19 +38,26 @@ jobs:
           key: v1/${{ runner.os }}/node-${{ matrix.node }}/${{ hashFiles('**/yarn.lock') }}
           restore-keys: v1/${{ runner.os }}/node-${{ matrix.node }}/
       - run: yarn
+      # Pin geckodriver for CI only — modern geckodriver (>=0.31) requires
+      # W3C capabilities, which selenium-webdriver 3.x (bundled with
+      # Protractor 7) does not send. Done here rather than in the npm
+      # `install` lifecycle so the pin doesn't leak into consumer installs.
+      - run: npx webdriver-manager update --no-chrome --no-standalone --versions.gecko=v0.30.0
       - name: Set up @percy/cli from git
         if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          CLI_BRANCH: ${{ github.event.inputs.branch }}
         run: |
           cd /tmp
-          git clone --branch ${{ github.event.inputs.branch }} --depth 1 https://github.com/percy/cli
+          git clone --branch "$CLI_BRANCH" --depth 1 https://github.com/percy/cli
           cd cli
           PERCY_PACKAGES=`find packages -mindepth 1 -maxdepth 1 -type d | sed -e 's/packages/@percy/g' | tr '\n' ' '`
           git log -1
           yarn
           yarn build
           yarn global:link
-          cd ${{ github.workspace }} 
+          cd "$GITHUB_WORKSPACE"
           yarn remove @percy/cli && yarn link `echo $PERCY_PACKAGES`
-          npx webdriver-manager update --no-chrome --no-standalone
+          npx webdriver-manager update --no-chrome --no-standalone --versions.gecko=v0.30.0
           npx percy --version
       - run: yarn test:coverage

@@ -1,7 +1,7 @@
 {
   "name": "@percy/protractor",
   "description": "Protractor client library for visual testing with Percy",
-  "version": "2.0.1",
+  "version": "2.0.2-beta.0",
   "license": "MIT",
   "author": "Perceptual Inc.",
   "repository": "https://github.com/percy/percy-protractor",
@@ -27,7 +27,7 @@
     "test:types": "tsd"
   },
   "dependencies": {
-    "@percy/sdk-utils": "1.31.14-beta.4"
+    "@percy/sdk-utils": "1.31.14"
   },
   "peerDependencies": {
     "protractor": "~7"
@@ -45,6 +45,9 @@
     "nyc": "^15.1.0",
     "protractor": "^7.0.0",
     "tsd": "^0.24.1"
+  },
+  "resolutions": {
+    "image-size": "1.0.2"
   },
   "packageManager": "yarn@1.22.22+sha512.a6b2f7906b721bba3d67d4aff083df04dad64c399707841b7acf00f6b133b7ac24255f2652fa22ae3534329dc6180534e98d17432037ff6fd140556e2bb3137e"
 }

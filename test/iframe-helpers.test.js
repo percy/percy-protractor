@@ -483,100 +483,149 @@ describe('findIframeByPercyId', () => {
 });
 
 describe('_iframe_shim', () => {
-  describe('resolveIgnoreSelectors', () => {
-    it('returns [] when no selectors are set', () => {
-      expect(shim.resolveIgnoreSelectors({})).toEqual([]);
-      expect(shim.resolveIgnoreSelectors()).toEqual([]);
-    });
+  // sdk-utils is the single source of truth for these values; pull them at
+  // runtime so this test tracks the dependency rather than hardcoding numbers
+  // that will drift when sdk-utils bumps.
+  const utils = require('@percy/sdk-utils');
+  const DEFAULT = utils.DEFAULT_MAX_IFRAME_DEPTH;
+  const HARD = utils.HARD_MAX_IFRAME_DEPTH;
 
-    it('returns the array unchanged when an array of strings is passed', () => {
-      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: ['.a', '.b'] })).toEqual(['.a', '.b']);
-    });
-
-    it('filters out non-string and empty entries from an array', () => {
-      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: ['.a', '', null, 7, '.b'] })).toEqual(['.a', '.b']);
-    });
-
-    it('wraps a single string selector in an array', () => {
-      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: '.solo' })).toEqual(['.solo']);
-    });
-
-    it('returns [] for an empty string selector', () => {
-      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: '' })).toEqual([]);
-    });
-
-    it('falls back to the legacy ignoreSelectors key', () => {
-      expect(shim.resolveIgnoreSelectors({ ignoreSelectors: ['.legacy'] })).toEqual(['.legacy']);
-    });
-
-    it('returns [] for unsupported types (number, object, boolean)', () => {
-      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: 42 })).toEqual([]);
-      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: { a: 1 } })).toEqual([]);
-      expect(shim.resolveIgnoreSelectors({ ignoreIframeSelectors: true })).toEqual([]);
-    });
+  // The canonical helpers fall back to `percy.config`, which other suites in
+  // this process can populate via the healthcheck flow — start each spec from
+  // a clean slate and restore whatever was there afterwards.
+  let ogConfig;
+  beforeEach(() => {
+    ogConfig = utils.percy.config;
+    delete utils.percy.config;
   });
 
-  describe('normalizeIgnoreSelectors', () => {
-    it('is an alias of resolveIgnoreSelectors', () => {
-      expect(shim.normalizeIgnoreSelectors({ ignoreIframeSelectors: ['.x'] })).toEqual(['.x']);
-      expect(shim.normalizeIgnoreSelectors()).toEqual([]);
-    });
+  afterEach(() => {
+    utils.percy.config = ogConfig;
   });
 
-  describe('resolveMaxFrameDepth', () => {
-    // sdk-utils exposes DEFAULT_MAX_IFRAME_DEPTH / HARD_MAX_IFRAME_DEPTH;
-    // pull them at runtime so this test tracks the dependency rather than
-    // hardcoding numbers that will drift when sdk-utils bumps.
-    const utils = require('@percy/sdk-utils');
-    const DEFAULT = utils.DEFAULT_MAX_IFRAME_DEPTH ?? 10;
-    const HARD = utils.HARD_MAX_IFRAME_DEPTH ?? 25;
+  // The shim delegates to the canonical @percy/sdk-utils implementations when
+  // the linked version exports them and uses local fallbacks otherwise. Run
+  // the same contract suite against both so the fallbacks can never drift
+  // from canonical behavior (and both stay fully covered in either mode).
+  Object.entries({
+    'public exports': shim,
+    'local fallbacks': shim._localFallbacks
+  }).forEach(([label, impl]) => {
+    describe(`resolveIgnoreSelectors (${label})`, () => {
+      it('returns [] when no selectors are set', () => {
+        expect(impl.resolveIgnoreSelectors({})).toEqual([]);
+        expect(impl.resolveIgnoreSelectors()).toEqual([]);
+      });
 
-    it('returns the default when not supplied', () => {
-      expect(shim.resolveMaxFrameDepth({})).toBe(DEFAULT);
-      expect(shim.resolveMaxFrameDepth()).toBe(DEFAULT);
+      it('returns the array unchanged when an array of strings is passed', () => {
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: ['.a', '.b'] })).toEqual(['.a', '.b']);
+      });
+
+      it('filters out non-string and empty entries from an array', () => {
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: ['.a', '', null, 7, '.b'] })).toEqual(['.a', '.b']);
+      });
+
+      it('wraps a single string selector in an array', () => {
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: '.solo' })).toEqual(['.solo']);
+      });
+
+      it('returns [] for an empty string selector', () => {
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: '' })).toEqual([]);
+      });
+
+      it('falls back to the legacy ignoreSelectors key', () => {
+        expect(impl.resolveIgnoreSelectors({ ignoreSelectors: ['.legacy'] })).toEqual(['.legacy']);
+      });
+
+      it('returns [] for unsupported types (number, object, boolean)', () => {
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: 42 })).toEqual([]);
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: { a: 1 } })).toEqual([]);
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: true })).toEqual([]);
+      });
+
+      it('falls back to the global percy config when no option is set', () => {
+        utils.percy.config = { snapshot: { ignoreIframeSelectors: ['.from-config'] } };
+        expect(impl.resolveIgnoreSelectors({})).toEqual(['.from-config']);
+      });
+
+      it('prefers the per-snapshot option over the global percy config', () => {
+        utils.percy.config = { snapshot: { ignoreIframeSelectors: ['.from-config'] } };
+        expect(impl.resolveIgnoreSelectors({ ignoreIframeSelectors: ['.opt'] })).toEqual(['.opt']);
+      });
     });
 
-    it('returns the explicit value when within range', () => {
-      const inRange = Math.min(DEFAULT, HARD);
-      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: inRange })).toBe(inRange);
+    describe(`normalizeIgnoreSelectors (${label})`, () => {
+      it('normalizes a raw value (not an options object) into a string[]', () => {
+        expect(impl.normalizeIgnoreSelectors(['.x'])).toEqual(['.x']);
+        expect(impl.normalizeIgnoreSelectors('.solo')).toEqual(['.solo']);
+        expect(impl.normalizeIgnoreSelectors(['.a', '', null, 7, '.b'])).toEqual(['.a', '.b']);
+      });
+
+      it('returns [] for unset, empty, and unsupported values', () => {
+        expect(impl.normalizeIgnoreSelectors()).toEqual([]);
+        expect(impl.normalizeIgnoreSelectors('')).toEqual([]);
+        expect(impl.normalizeIgnoreSelectors({ a: 1 })).toEqual([]);
+      });
     });
 
-    it('accepts the legacy maxIframeDepth key', () => {
-      const inRange = Math.min(DEFAULT, HARD);
-      expect(shim.resolveMaxFrameDepth({ maxIframeDepth: inRange })).toBe(inRange);
+    describe(`resolveMaxFrameDepth (${label})`, () => {
+      it('returns the default when not supplied', () => {
+        expect(impl.resolveMaxFrameDepth({})).toBe(DEFAULT);
+        expect(impl.resolveMaxFrameDepth()).toBe(DEFAULT);
+      });
+
+      it('returns the explicit maxIframeDepth value when within range', () => {
+        const inRange = Math.min(DEFAULT, HARD);
+        expect(impl.resolveMaxFrameDepth({ maxIframeDepth: inRange })).toBe(inRange);
+      });
+
+      it('returns the default for invalid values (negative, zero, non-numeric)', () => {
+        expect(impl.resolveMaxFrameDepth({ maxIframeDepth: -5 })).toBe(DEFAULT);
+        expect(impl.resolveMaxFrameDepth({ maxIframeDepth: 0 })).toBe(DEFAULT);
+        expect(impl.resolveMaxFrameDepth({ maxIframeDepth: 'banana' })).toBe(DEFAULT);
+      });
+
+      it('clamps overflow values down to the hard cap', () => {
+        expect(impl.resolveMaxFrameDepth({ maxIframeDepth: HARD + 1000 })).toBe(HARD);
+      });
+
+      it('floors fractional values', () => {
+        expect(impl.resolveMaxFrameDepth({ maxIframeDepth: 2.9 })).toBe(2);
+      });
+
+      it('falls back to the global percy config when no option is set', () => {
+        utils.percy.config = { snapshot: { maxIframeDepth: Math.min(DEFAULT, HARD) + 1 } };
+        expect(impl.resolveMaxFrameDepth({})).toBe(Math.min(DEFAULT, HARD) + 1);
+      });
+
+      it('prefers the per-snapshot option over the global percy config', () => {
+        utils.percy.config = { snapshot: { maxIframeDepth: HARD } };
+        const inRange = Math.min(DEFAULT, HARD);
+        expect(impl.resolveMaxFrameDepth({ maxIframeDepth: inRange })).toBe(inRange);
+      });
     });
 
-    it('clamps negative values up to 0', () => {
-      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: -5 })).toBe(0);
-    });
+    describe(`isUnsupportedIframeSrc (${label})`, () => {
+      it('returns true for null/empty', () => {
+        expect(impl.isUnsupportedIframeSrc(null)).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('')).toBe(true);
+      });
 
-    it('clamps overflow values down to the hard cap', () => {
-      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: HARD + 1000 })).toBe(HARD);
-    });
+      it('returns true for browser-internal, legacy, and non-http schemes', () => {
+        expect(impl.isUnsupportedIframeSrc('about:blank')).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('javascript:void(0)')).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('data:text/html,foo')).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('blob:http://example.com/x')).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('vbscript:msgbox')).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('file:///etc/passwd')).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('ws://example.com/socket')).toBe(true);
+        expect(impl.isUnsupportedIframeSrc('ftp://example.com/file')).toBe(true);
+      });
 
-    it('falls back to default when value is not numeric', () => {
-      expect(shim.resolveMaxFrameDepth({ maxFrameDepth: 'banana' })).toBe(DEFAULT);
-    });
-  });
-
-  describe('isUnsupportedIframeSrc', () => {
-    it('returns true for null/empty', () => {
-      expect(shim.isUnsupportedIframeSrc(null)).toBe(true);
-      expect(shim.isUnsupportedIframeSrc('')).toBe(true);
-    });
-
-    it('returns true for browser-internal and legacy schemes', () => {
-      expect(shim.isUnsupportedIframeSrc('about:blank')).toBe(true);
-      expect(shim.isUnsupportedIframeSrc('javascript:void(0)')).toBe(true);
-      expect(shim.isUnsupportedIframeSrc('data:text/html,foo')).toBe(true);
-      expect(shim.isUnsupportedIframeSrc('blob:http://example.com/x')).toBe(true);
-      expect(shim.isUnsupportedIframeSrc('vbscript:msgbox')).toBe(true);
-      expect(shim.isUnsupportedIframeSrc('file:///etc/passwd')).toBe(true);
-    });
-
-    it('returns false for http(s)', () => {
-      expect(shim.isUnsupportedIframeSrc('http://example.com')).toBe(false);
-      expect(shim.isUnsupportedIframeSrc('https://example.com/page')).toBe(false);
+      it('returns false for http(s)', () => {
+        expect(impl.isUnsupportedIframeSrc('http://example.com')).toBe(false);
+        expect(impl.isUnsupportedIframeSrc('https://example.com/page')).toBe(false);
+      });
     });
   });
 });
